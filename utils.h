@@ -8,6 +8,8 @@
 
 float *allocateTensor(unsigned Size);
 
+bool tensorsEqual(float *T1, float *T2, const unsigned Size, const float Epsilon=1e-6);
+
 void randomizeTensor(float *&Tensor, unsigned Size);
 
 void fillSerialTensor(float *&Tensor, unsigned Size);

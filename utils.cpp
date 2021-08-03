@@ -5,11 +5,17 @@
 #include "utils.h"
 
 
-
 using namespace std;
 
 
 float *allocateTensor(unsigned Size) { return new float[Size]; }
+
+bool tensorsEqual(float *T1, float *T2, const unsigned Size, const float Epsilon) {
+  for (unsigned i = 0; i < Size; ++i)
+    if (abs(T1[i] - T2[i]) > Epsilon)
+      return false;
+  return true;
+}
 
 void randomizeTensor(float *&Tensor, unsigned Size) {
   srand(time(nullptr));
@@ -25,7 +31,7 @@ void fillSerialTensor(float *&Tensor, unsigned Size) {
 void printVector(float *Vector, unsigned Len, const string Pre="", const string Post="\n") {
   cout << Pre << "[" << Vector[0];
   for (unsigned i = 1; i < Len; ++i)
-    cout << setw(4) << Vector[i];
+    cout << setw(5) << Vector[i];
   cout << "]" << Post;
 }
 
