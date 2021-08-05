@@ -22,4 +22,13 @@ void conv_mec(const float *Input, float *Kernel, float *Output, unsigned C,
               unsigned OH, unsigned OW, unsigned PadH, unsigned PadW,
               unsigned StrideH, unsigned StrideW, unsigned DilH, unsigned DilW);
 
+void mm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
+        unsigned LDA, unsigned LDB, unsigned LDC);
+
+typedef float *(*PackFuncT)(float *);
+
+void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
+              unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW);
+              // PackFuncT *packA, PackFuncT *packB);
+
 #endif // _CONV_H_

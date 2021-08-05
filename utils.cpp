@@ -8,23 +8,29 @@ using namespace std;
 
 float *allocateTensor(unsigned Size) { return new float[Size]; }
 
-bool tensorsEqual(float *T1, float *T2, const unsigned Size,
-                  const float Epsilon) {
-  for (unsigned i = 0; i < Size; ++i)
-    if (abs(T1[i] - T2[i]) > Epsilon)
-      return false;
-  return true;
-}
-
 void randomizeTensor(float *&Tensor, unsigned Size) {
   srand(time(nullptr));
   for (unsigned i = 0; i < Size; ++i)
     Tensor[i] = rand() % 255;
 }
 
-void fillSerialTensor(float *&Tensor, unsigned Size) {
+void fillTensor(float *&Tensor, unsigned Size, float Value) {
   for (unsigned i = 0; i < Size; ++i)
-    Tensor[i] = i + 1;
+    Tensor[i] = Value < 0. ? i + 1 : Value;
+}
+
+float *allocateAndFillTensor(unsigned Size, float Value) {
+  auto *Tensor = allocateTensor(Size);
+  fillTensor(Tensor, Size, Value);
+  return Tensor;
+}
+
+bool tensorsEqual(float *T1, float *T2, const unsigned Size,
+                  const float Epsilon) {
+  for (unsigned i = 0; i < Size; ++i)
+    if (abs(T1[i] - T2[i]) > Epsilon)
+      return false;
+  return true;
 }
 
 void printVector(float *Vector, unsigned Len, const string Pre = "",

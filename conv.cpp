@@ -1,9 +1,21 @@
-#include "blis.h"
 #include "utils.h"
+#include <stdlib.h>
+#include <algorithm>
+#include <blis.h>
+#include <chrono>
 #include <iostream>
 #include <string>
 
+
 using namespace std;
+
+
+#define BLOCK_MR 6
+#define BLOCK_NR 16
+#define BLOCK_MC 168
+#define BLOCK_KC 256
+#define BLOCK_NC 4080
+
 
 #define is_a_ge_zero_and_a_lt_b(a, b) ((a >= 0) && (a < b))
 void im2col_cpu(const float *data_im, const int channels, const int height,
@@ -145,3 +157,123 @@ void conv_mec(const float *Input, float *Kernel, float *Output, unsigned C,
     cout << string(80, '-') << "\n\n";
   }
 }
+
+void packA(float *Block, float *&Pack, unsigned LDA, unsigned MC, unsigned KC) {
+  unsigned MR = BLOCK_MR, NR = BLOCK_NR;
+
+  for (unsigned ic = 0; ic < MC; ic += MR)
+    for (unsigned k = 0; k < KC; ++k) {
+        float *BlockOff = Block + ic * LDA + k;
+        float *PackOff = Pack + ic * KC + k * MR;
+      for (unsigned ir = 0; ir < MR; ++ir) {
+        unsigned From = (ic + ir) * LDA + k;
+        unsigned To = ic * KC + k * MR + ir;
+        Pack[To] = Block[From];
+    }
+  }
+}
+
+void packAUnrolled(float *Block, float *&Pack, unsigned LDA, unsigned MC, unsigned KC) {
+  unsigned MR = BLOCK_MR;
+
+  for (unsigned k = 0; k < KC; ++k) {
+    for (unsigned ic = 0; ic < MC; ic += MR) {
+      float *BlockOff = Block + ic * LDA + k;
+      float *PackOff = Pack + ic * KC + k * MR;
+      // MR times (6)
+      *(PackOff++) = *(BlockOff) + 0 * LDA;
+      *(PackOff++) = *(BlockOff) + 1 * LDA;
+      *(PackOff++) = *(BlockOff) + 2 * LDA;
+      *(PackOff++) = *(BlockOff) + 3 * LDA;
+      *(PackOff++) = *(BlockOff) + 4 * LDA;
+      *(PackOff++) = *(BlockOff) + 5 * LDA;
+    }
+  }
+}
+
+void packB(float *Block, float *&Pack, unsigned LDB, unsigned KC, unsigned NC) {
+  unsigned MR = BLOCK_MR, NR = BLOCK_NR;
+
+  for (unsigned jc = 0; jc < NC; jc += NR)
+    for (unsigned k = 0; k < KC; ++k) {
+      for (unsigned jr = 0; jr < NR; ++jr) {
+        unsigned From = jc + jr + LDB * k;
+        unsigned To = jc * KC + k * NR + jr;
+        Pack[To] = Block[From];
+    }
+  }
+}
+
+void packBUnrolled(float *Block, float *&Pack, unsigned LDB, unsigned KC, unsigned NC) {
+  unsigned NR = BLOCK_NR;
+
+  for (unsigned k = 0; k < KC; ++k) {
+    for (unsigned jc = 0; jc < NC; jc += NR) {
+      float *BlockOff = Block + jc + LDB * k;
+      float *PackOff = Pack + jc * KC + k * NR;
+      // NR times (16)
+      *(PackOff++) = *(BlockOff++);
+      *(PackOff++) = *(BlockOff++);
+      *(PackOff++) = *(BlockOff++);
+      *(PackOff++) = *(BlockOff++);
+      *(PackOff++) = *(BlockOff++);
+      *(PackOff++) = *(BlockOff++);
+      *(PackOff++) = *(BlockOff++);
+      *(PackOff++) = *(BlockOff++);
+      *(PackOff++) = *(BlockOff++);
+      *(PackOff++) = *(BlockOff++);
+      *(PackOff++) = *(BlockOff++);
+      *(PackOff++) = *(BlockOff++);
+      *(PackOff++) = *(BlockOff++);
+      *(PackOff++) = *(BlockOff++);
+      *(PackOff++) = *(BlockOff++);
+      *(PackOff++) = *(BlockOff++);
+    }
+  }
+}
+
+void mm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
+        unsigned LDA, unsigned LDB, unsigned LDC) {
+
+  unsigned MC = BLOCK_MC, KC = BLOCK_KC, NC = BLOCK_NC;
+  unsigned MR = BLOCK_MR, NR = BLOCK_NR;
+
+  float *APack = (float *)aligned_alloc(4096, MC * KC * sizeof(float));
+  float *BPack = (float *)aligned_alloc(4096, KC * NC * sizeof(float));
+
+  auto *cntx = bli_gks_query_cntx();
+  auto *data = new auxinfo_t;
+
+  float alpha = 1.0, beta = 1.0;
+  for (unsigned jc = 0; jc < N; jc += NC)
+    for (unsigned pc = 0; pc < K; pc += KC) {
+      packB(B + pc * LDB + jc, BPack, LDB, KC, NC);
+      for (unsigned ic = 0; ic < M; ic += MC) {
+        packA(A + ic * LDA + pc, APack, LDA, MC, KC);
+        for (unsigned jr = 0; jr < NC; jr += NR)
+          for (unsigned ir = 0; ir < MC; ir += MR) {
+            bli_sgemm_haswell_asm_6x16(KC, &alpha,
+                APack + ir * KC, BPack + jr * KC, &beta,
+                C + (ic + ir) * LDC + jc + jr, LDC, 1,
+                data, cntx);
+          }
+      }
+    }
+}
+
+// void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
+//               unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW) {
+//               //PackFuncT *packA, PackFuncT *packB) {
+// 
+//   // OH, OW
+//   unsigned OH = H - KH + 1, OW = W - KW + 1;
+// 
+//   // gemm m x k x n
+//   unsigned m = M, k = C * KH * KW, n = M * OH * OW;
+// 
+//   for (unsigned jc = 0; jc < n; jc += BLOCK_NC)
+//     for (unsigned pc = 0; pc < k; pc += BLOCK_KC) {
+//       for (unsigned ic = 0; ic < m; ic += BLOCK_MC) {
+//       }
+//     }
+// }
