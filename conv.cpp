@@ -159,12 +159,10 @@ void conv_mec(const float *Input, float *Kernel, float *Output, unsigned C,
 }
 
 void packA(float *Block, float *&Pack, unsigned LDA, unsigned MC, unsigned KC) {
-  unsigned MR = BLOCK_MR, NR = BLOCK_NR;
+  unsigned MR = BLOCK_MR;
 
   for (unsigned ic = 0; ic < MC; ic += MR)
     for (unsigned k = 0; k < KC; ++k) {
-        float *BlockOff = Block + ic * LDA + k;
-        float *PackOff = Pack + ic * KC + k * MR;
       for (unsigned ir = 0; ir < MR; ++ir) {
         unsigned From = (ic + ir) * LDA + k;
         unsigned To = ic * KC + k * MR + ir;
@@ -192,7 +190,7 @@ void packAUnrolled(float *Block, float *&Pack, unsigned LDA, unsigned MC, unsign
 }
 
 void packB(float *Block, float *&Pack, unsigned LDB, unsigned KC, unsigned NC) {
-  unsigned MR = BLOCK_MR, NR = BLOCK_NR;
+  unsigned NR = BLOCK_NR;
 
   for (unsigned jc = 0; jc < NC; jc += NR)
     for (unsigned k = 0; k < KC; ++k) {
@@ -244,18 +242,17 @@ void mm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
   auto *cntx = bli_gks_query_cntx();
   auto *data = new auxinfo_t;
 
-  float alpha = 1.0, beta = 0.0;
+  float Alpha = 1.0, Beta = 0.0;
   for (unsigned jc = 0; jc < N; jc += NC)
     for (unsigned k = 0; k < K; k += KC) {
-      if (k != 0) // Accumulate
-        beta = 1.0;
+      Beta = k == 0 ? 0.0 : 1.0; // Accumulate
       packB(B + k * LDB + jc, BPack, LDB, KC, NC);
       for (unsigned ic = 0; ic < M; ic += MC) {
         packA(A + ic * LDA + k, APack, LDA, MC, KC);
         for (unsigned jr = 0; jr < NC; jr += NR)
           for (unsigned ir = 0; ir < MC; ir += MR) {
-            bli_sgemm_haswell_asm_6x16(KC, &alpha,
-                APack + ir * KC, BPack + jr * KC, &beta,
+            bli_sgemm_haswell_asm_6x16(KC, &Alpha,
+                APack + ir * KC, BPack + jr * KC, &Beta,
                 C + (ic + ir) * LDC + jc + jr, LDC, 1,
                 data, cntx);
           }
