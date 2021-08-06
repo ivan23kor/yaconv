@@ -244,12 +244,14 @@ void mm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
   auto *cntx = bli_gks_query_cntx();
   auto *data = new auxinfo_t;
 
-  float alpha = 1.0, beta = 1.0;
+  float alpha = 1.0, beta = 0.0;
   for (unsigned jc = 0; jc < N; jc += NC)
-    for (unsigned pc = 0; pc < K; pc += KC) {
-      packB(B + pc * LDB + jc, BPack, LDB, KC, NC);
+    for (unsigned k = 0; k < K; k += KC) {
+      if (k != 0) // Accumulate
+        beta = 1.0;
+      packB(B + k * LDB + jc, BPack, LDB, KC, NC);
       for (unsigned ic = 0; ic < M; ic += MC) {
-        packA(A + ic * LDA + pc, APack, LDA, MC, KC);
+        packA(A + ic * LDA + k, APack, LDA, MC, KC);
         for (unsigned jr = 0; jr < NC; jr += NR)
           for (unsigned ir = 0; ir < MC; ir += MR) {
             bli_sgemm_haswell_asm_6x16(KC, &alpha,
