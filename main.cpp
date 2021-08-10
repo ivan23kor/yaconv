@@ -31,7 +31,7 @@ using namespace std::chrono;
 #define KW_ 3
 #endif
 
-int main() {
+int main(int argc, char **argv) {
   // // Init Kernel
   // float *Kernel = allocateSerialTensor(M_ * C_ * KH_ * KW_);
   // cout << "=== Kernel ===\n";
@@ -58,38 +58,50 @@ int main() {
   // conv_mec(Input, Kernel, OutputMec, C_, H_, W_, M_, KH_, KW_, OH, OW, 0, 0, 1,
   //          1, 1, 1);
 
+  if (argc != 4) {
+    cerr << "Usage: ./yaconv M K N\n";
+    return -1;
+  }
+
+  unsigned M = atoi(argv[1]);
+  unsigned K = atoi(argv[2]);
+  unsigned N = atoi(argv[3]);
+
   // Convolution with convGemm
-  unsigned M = 16800, K = 2560, N = 4080;
-  float *A = allocateAndFillTensor(M * K);
-  float *B = allocateAndFillTensor(K * N);
-  float *C = allocateTensor(M * N);
-  float *CAns = allocateTensor(M * N);
+  // float *A = allocateFilledTensor(M * K);
+  // float *B = allocateFilledTensor(K * N);
+  float *A = allocateRandomTensor(M * K);
+  float *B = allocateRandomTensor(K * N);
+  float *CBLIS = allocateTensor(M * N);
+  float *CMine = allocateTensor(M * N);
   // printTensor(A, {M, K});
   // printTensor(B, {K, N});
-  // printTensor(C, {M, N});
 
+  float Alpha = 1.0, Beta = 0.0;
   high_resolution_clock::time_point t1, t2;
 
-  // Lib gemm
-  float alpha = 1.0, beta = 0.0;
+  // BLIS gemm
   t1 = high_resolution_clock::now();
-  bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &alpha, A, K, 1, B, N, 1, &beta, CAns, N, 1);
+  bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &Alpha, A, K, 1, B, N, 1, &Beta, CBLIS, N, 1);
   t2 = high_resolution_clock::now();
   double BLIS = duration_cast<duration<double>>(t2 - t1).count();
 
   // My gemm
   t1 = high_resolution_clock::now();
-  mm(A, B, C, M, K, N, K, N, N);
+  mm(A, B, CMine, M, K, N, K, N, N);
   t2 = high_resolution_clock::now();
   double Mine = duration_cast<duration<double>>(t2 - t1).count();
 
-  cout << Mine / BLIS << "\n";
+  cout << BLIS / Mine << "\n";
 
-  if (tensorsEqual(C, CAns, M * N))
+  if (tensorsEqual(CMine, CBLIS, M * N))
     cout << "Good\n";
   else
     cout << "Bad\n";
-  // mm(KH_, KW_, C_, M_, 1.0, Kernel, H_, W_, 1, 1, 1, Input, 0.0, OutputConvGemm);
+  if (M * N < 1000) {
+    printTensor(CMine, {M, N});
+    printTensor(CBLIS, {M, N});
+  }
 
   // Check conv outputs match
   int ret = 0;

@@ -158,107 +158,103 @@ void conv_mec(const float *Input, float *Kernel, float *Output, unsigned C,
   }
 }
 
+#define MIN(a, b) a < b ? a : b
 void packA(float *Block, float *&Pack, unsigned LDA, unsigned MC, unsigned KC) {
-  unsigned MR = BLOCK_MR;
-
-  for (unsigned ic = 0; ic < MC; ic += MR)
+  for (unsigned ic = 0; ic < MC; ic += BLOCK_MR) {
+    unsigned MR = MIN(MC - ic, BLOCK_MR);
     for (unsigned k = 0; k < KC; ++k) {
       for (unsigned ir = 0; ir < MR; ++ir) {
         unsigned From = (ic + ir) * LDA + k;
-        unsigned To = ic * KC + k * MR + ir;
+        unsigned To = ic * KC + k * BLOCK_MR + ir;
         Pack[To] = Block[From];
-    }
-  }
-}
-
-void packAUnrolled(float *Block, float *&Pack, unsigned LDA, unsigned MC, unsigned KC) {
-  unsigned MR = BLOCK_MR;
-
-  for (unsigned k = 0; k < KC; ++k) {
-    for (unsigned ic = 0; ic < MC; ic += MR) {
-      float *BlockOff = Block + ic * LDA + k;
-      float *PackOff = Pack + ic * KC + k * MR;
-      // MR times (6)
-      *(PackOff++) = *(BlockOff) + 0 * LDA;
-      *(PackOff++) = *(BlockOff) + 1 * LDA;
-      *(PackOff++) = *(BlockOff) + 2 * LDA;
-      *(PackOff++) = *(BlockOff) + 3 * LDA;
-      *(PackOff++) = *(BlockOff) + 4 * LDA;
-      *(PackOff++) = *(BlockOff) + 5 * LDA;
+      }
     }
   }
 }
 
 void packB(float *Block, float *&Pack, unsigned LDB, unsigned KC, unsigned NC) {
-  unsigned NR = BLOCK_NR;
-
-  for (unsigned jc = 0; jc < NC; jc += NR)
+  for (unsigned jc = 0; jc < NC; jc += BLOCK_NR) {
+    unsigned NR = MIN(NC - jc, BLOCK_NR);
     for (unsigned k = 0; k < KC; ++k) {
       for (unsigned jr = 0; jr < NR; ++jr) {
         unsigned From = jc + jr + LDB * k;
-        unsigned To = jc * KC + k * NR + jr;
+        unsigned To = jc * KC + k * BLOCK_NR + jr;
         Pack[To] = Block[From];
+      }
     }
   }
 }
 
-void packBUnrolled(float *Block, float *&Pack, unsigned LDB, unsigned KC, unsigned NC) {
-  unsigned NR = BLOCK_NR;
-
-  for (unsigned k = 0; k < KC; ++k) {
-    for (unsigned jc = 0; jc < NC; jc += NR) {
-      float *BlockOff = Block + jc + LDB * k;
-      float *PackOff = Pack + jc * KC + k * NR;
-      // NR times (16)
-      *(PackOff++) = *(BlockOff++);
-      *(PackOff++) = *(BlockOff++);
-      *(PackOff++) = *(BlockOff++);
-      *(PackOff++) = *(BlockOff++);
-      *(PackOff++) = *(BlockOff++);
-      *(PackOff++) = *(BlockOff++);
-      *(PackOff++) = *(BlockOff++);
-      *(PackOff++) = *(BlockOff++);
-      *(PackOff++) = *(BlockOff++);
-      *(PackOff++) = *(BlockOff++);
-      *(PackOff++) = *(BlockOff++);
-      *(PackOff++) = *(BlockOff++);
-      *(PackOff++) = *(BlockOff++);
-      *(PackOff++) = *(BlockOff++);
-      *(PackOff++) = *(BlockOff++);
-      *(PackOff++) = *(BlockOff++);
-    }
-  }
+void sxpby(const float *restrict X, float *restrict Y, unsigned M, unsigned N,
+            unsigned LDX, unsigned LDY, const float Beta) {
+    if (Beta == 0.0)
+      for(unsigned i = 0; i < M; ++i)
+        for(unsigned j = 0; j < N; ++j)
+          *(Y + i * LDY + j) = *(X + i * LDX + j);
+    else
+      for(unsigned i = 0; i < M; ++i)
+        for(unsigned j = 0; j < N; ++j) {
+          *(Y + i * LDY + j) *= Beta;
+          *(Y + i * LDY + j) += *(X + i * LDX + j);
+        }
 }
 
 void mm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
         unsigned LDA, unsigned LDB, unsigned LDC) {
 
-  unsigned MC = BLOCK_MC, KC = BLOCK_KC, NC = BLOCK_NC;
-  unsigned MR = BLOCK_MR, NR = BLOCK_NR;
-
-  float *APack = (float *)aligned_alloc(4096, MC * KC * sizeof(float));
-  float *BPack = (float *)aligned_alloc(4096, KC * NC * sizeof(float));
+  auto *APack = (float *)aligned_alloc(4096, BLOCK_MC * BLOCK_KC * sizeof(float));
+  auto *BPack = (float *)aligned_alloc(4096, BLOCK_KC * BLOCK_NC * sizeof(float));
+  auto *CBuff = (float *)aligned_alloc(4096, BLOCK_MR * BLOCK_NR * sizeof(float));
 
   auto *cntx = bli_gks_query_cntx();
   auto *data = new auxinfo_t;
 
-  float Alpha = 1.0, Beta = 0.0;
-  for (unsigned jc = 0; jc < N; jc += NC)
-    for (unsigned k = 0; k < K; k += KC) {
+  float Alpha = 1.0, Beta = 0.0, Zero = 0.0;
+  for (unsigned jc = 0; jc < N; jc += BLOCK_NC) {
+
+    unsigned NC = MIN(N - jc, BLOCK_NC);
+
+    for (unsigned k = 0; k < K; k += BLOCK_KC) {
+
+      unsigned KC = MIN(K - k, BLOCK_KC);
+      
       Beta = k == 0 ? 0.0 : 1.0; // Accumulate
-      packB(B + k * LDB + jc, BPack, LDB, KC, NC);
-      for (unsigned ic = 0; ic < M; ic += MC) {
+      
+      packB(B + k * LDB + jc, BPack, LDB, KC, BLOCK_NC);
+      
+      for (unsigned ic = 0; ic < M; ic += BLOCK_MC) {
+      
+        unsigned MC = MIN(M - ic, BLOCK_MC);
+
         packA(A + ic * LDA + k, APack, LDA, MC, KC);
-        for (unsigned jr = 0; jr < NC; jr += NR)
-          for (unsigned ir = 0; ir < MC; ir += MR) {
-            bli_sgemm_haswell_asm_6x16(KC, &Alpha,
-                APack + ir * KC, BPack + jr * KC, &Beta,
-                C + (ic + ir) * LDC + jc + jr, LDC, 1,
-                data, cntx);
+        
+        for (unsigned jr = 0; jr < NC; jr += BLOCK_NR) {
+          
+          unsigned NR = MIN(NC - jr, BLOCK_NR);
+
+          for (unsigned ir = 0; ir < MC; ir += BLOCK_MR) {
+        
+            unsigned MR = MIN(MC - ir, BLOCK_MR);
+
+            float *Ar = APack + ir * KC;
+            float *Br = BPack + jr * KC;
+            float *Cr = C + (ic + ir) * LDC + jc + jr;
+
+            if ((MR == BLOCK_MR) && (NR == BLOCK_NR))
+              bli_sgemm_haswell_asm_6x16(KC, &Alpha, Ar, Br, &Beta,
+                  Cr, LDC, 1, data, cntx);
+            else {
+              bli_sgemm_haswell_asm_6x16(KC, &Alpha, Ar, Br, &Zero,
+                  CBuff, BLOCK_NR, 1, data, cntx);
+              sxpby(CBuff, Cr, MR, NR, BLOCK_NR, LDC, Beta);
+            }
           }
+        }
       }
     }
+  }
 }
+#undef MIN
 
 // void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
 //               unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW) {

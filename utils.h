@@ -6,11 +6,13 @@
 
 float *allocateTensor(unsigned Size);
 
-void randomizeTensor(float *&Tensor, unsigned Size);
+void randomizeTensor(float *&Tensor, unsigned Size, unsigned MaxVal=256);
 
 void fillTensor(float *&Tensor, unsigned Size, float Value=-1.);
 
-float *allocateAndFillTensor(unsigned Size, float Value=-1.);
+float *allocateFilledTensor(unsigned Size, float Value=-1.);
+
+float *allocateRandomTensor(unsigned Size, unsigned MaxVal=256);
 
 bool tensorsEqual(float *T1, float *T2, const unsigned Size,
                   const float Epsilon = 1e-6);

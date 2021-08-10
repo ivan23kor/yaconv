@@ -8,10 +8,10 @@ using namespace std;
 
 float *allocateTensor(unsigned Size) { return new float[Size]; }
 
-void randomizeTensor(float *&Tensor, unsigned Size) {
+void randomizeTensor(float *&Tensor, unsigned Size, unsigned MaxVal) {
   srand(time(nullptr));
   for (unsigned i = 0; i < Size; ++i)
-    Tensor[i] = rand() % 255;
+    Tensor[i] = rand() % MaxVal;
 }
 
 void fillTensor(float *&Tensor, unsigned Size, float Value) {
@@ -19,18 +19,31 @@ void fillTensor(float *&Tensor, unsigned Size, float Value) {
     Tensor[i] = Value < 0. ? i + 1 : Value;
 }
 
-float *allocateAndFillTensor(unsigned Size, float Value) {
+float *allocateFilledTensor(unsigned Size, float Value) {
   auto *Tensor = allocateTensor(Size);
   fillTensor(Tensor, Size, Value);
   return Tensor;
 }
 
+float *allocateRandomTensor(unsigned Size, unsigned MaxVal) {
+  auto *Tensor = allocateTensor(Size);
+  randomizeTensor(Tensor, Size);
+  return Tensor;
+}
+
 bool tensorsEqual(float *T1, float *T2, const unsigned Size,
                   const float Epsilon) {
-  for (unsigned i = 0; i < Size; ++i)
-    if (abs(T1[i] - T2[i]) > Epsilon)
-      return false;
-  return true;
+  unsigned Count = 0;
+  for (unsigned i = 0; i < Size; ++i) {
+    float diff = abs(T1[i] - T2[i]);
+    if (diff > Epsilon) {
+      cout << "[" << i << "] " << diff << " = |" << T1[i] << " - " << T2[i] << "|\n";
+      ++Count;
+    }
+  }
+  if (Count > 0)
+    cout << Count << " values differ.\n";
+  return Count == 0;
 }
 
 void printVector(float *Vector, unsigned Len, const string Pre = "",
