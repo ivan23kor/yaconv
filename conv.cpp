@@ -1,9 +1,10 @@
+#include "conv.h"
 #include "utils.h"
-#include <stdlib.h>
 #include <algorithm>
 #include <blis.h>
 #include <chrono>
 #include <iostream>
+#include <stdlib.h>
 #include <string>
 
 
@@ -45,9 +46,6 @@ void im2col_cpu(const float *data_im, const int channels, const int height,
             int input_col = -pad_w + kernel_col * dilation_w;
             for (int output_col = output_w; output_col; output_col--) {
               if (is_a_ge_zero_and_a_lt_b(input_col, width)) {
-                // if (2 == data_im[input_row * width + input_col])
-                // cout << input_row << " * " << width << " + " << input_col <<
-                // "\n";
                 *(data_col++) = data_im[input_row * width + input_col];
               } else {
                 *(data_col++) = 0;
@@ -160,27 +158,31 @@ void conv_mec(const float *Input, float *Kernel, float *Output, unsigned C,
 
 #define MIN(a, b) a < b ? a : b
 void packA(float *Block, float *&Pack, unsigned LDA, unsigned MC, unsigned KC) {
+  unsigned To = 0;
   for (unsigned ic = 0; ic < MC; ic += BLOCK_MR) {
     unsigned MR = MIN(MC - ic, BLOCK_MR);
     for (unsigned k = 0; k < KC; ++k) {
       for (unsigned ir = 0; ir < MR; ++ir) {
         unsigned From = (ic + ir) * LDA + k;
-        unsigned To = ic * KC + k * BLOCK_MR + ir;
-        Pack[To] = Block[From];
+        Pack[To++] = Block[From];
       }
+      for (unsigned End = To + BLOCK_MR - MR; To != End; ++To)
+        Pack[To] = 0.0;
     }
   }
 }
 
 void packB(float *Block, float *&Pack, unsigned LDB, unsigned KC, unsigned NC) {
+  unsigned To = 0;
   for (unsigned jc = 0; jc < NC; jc += BLOCK_NR) {
     unsigned NR = MIN(NC - jc, BLOCK_NR);
     for (unsigned k = 0; k < KC; ++k) {
       for (unsigned jr = 0; jr < NR; ++jr) {
         unsigned From = jc + jr + LDB * k;
-        unsigned To = jc * KC + k * BLOCK_NR + jr;
-        Pack[To] = Block[From];
+        Pack[To++] = Block[From];
       }
+      for (unsigned End = To + BLOCK_NR - NR; To != End; ++To)
+        Pack[To] = 0.0;
     }
   }
 }
@@ -220,7 +222,7 @@ void mm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
       
       Beta = k == 0 ? 0.0 : 1.0; // Accumulate
       
-      packB(B + k * LDB + jc, BPack, LDB, KC, BLOCK_NC);
+      packB(B + k * LDB + jc, BPack, LDB, KC, NC);
       
       for (unsigned ic = 0; ic < M; ic += BLOCK_MC) {
       
@@ -258,17 +260,3 @@ void mm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
 
 // void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
 //               unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW) {
-//               //PackFuncT *packA, PackFuncT *packB) {
-// 
-//   // OH, OW
-//   unsigned OH = H - KH + 1, OW = W - KW + 1;
-// 
-//   // gemm m x k x n
-//   unsigned m = M, k = C * KH * KW, n = M * OH * OW;
-// 
-//   for (unsigned jc = 0; jc < n; jc += BLOCK_NC)
-//     for (unsigned pc = 0; pc < k; pc += BLOCK_KC) {
-//       for (unsigned ic = 0; ic < m; ic += BLOCK_MC) {
-//       }
-//     }
-// }
