@@ -27,8 +27,11 @@ void mm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
 
 typedef float *(*PackFuncT)(float *);
 
+void packB(float *Block, float *&Pack, unsigned LDB, unsigned KC, unsigned NC);
+
+void packInputAsB(float *Input, float *&Pack, unsigned Ks, unsigned Ns, unsigned KC, unsigned NC, unsigned C, unsigned H, unsigned W, unsigned KH, unsigned KW, unsigned OW);
+
 void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
               unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW);
-              // PackFuncT *packA, PackFuncT *packB);
 
 #endif // _CONV_H_

@@ -35,9 +35,9 @@ bool tensorsEqual(float *T1, float *T2, const unsigned Size,
                   const float Epsilon) {
   unsigned Count = 0;
   for (unsigned i = 0; i < Size; ++i) {
-    float diff = abs(T1[i] - T2[i]);
-    if (diff > Epsilon) {
-      cout << "[" << i << "] " << diff << " = |" << T1[i] << " - " << T2[i] << "|\n";
+    float rel_diff = abs((T1[i] - T2[i]) / T1[i]);
+    if (rel_diff > Epsilon) {
+      cerr << "[" << i << "] " << rel_diff << " |" << T1[i] << " - " << T2[i] << "|\n";
       ++Count;
     }
   }

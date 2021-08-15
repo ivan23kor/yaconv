@@ -1,4 +1,4 @@
-#include "conv.h"
+#include "config.h"
 #include "utils.h"
 #include <algorithm>
 #include <blis.h>
@@ -10,13 +10,7 @@
 
 using namespace std;
 
-
-#define BLOCK_MR 6
-#define BLOCK_NR 16
-#define BLOCK_MC 168
-#define BLOCK_KC 256
-#define BLOCK_NC 4080
-
+#define CONV_DEBUG(expr) if (DEBUG == 1) {expr;}
 
 #define is_a_ge_zero_and_a_lt_b(a, b) ((a >= 0) && (a < b))
 void im2col_cpu(const float *data_im, const int channels, const int height,
@@ -94,9 +88,11 @@ void conv_im2col(const float *Input, float *Kernel, float *Output, unsigned C,
   // im2col
   float *BufIm2col = allocateTensor(C * KH * KW * OH * OW);
   im2col_cpu(Input, C, H, W, KH, KW, 0, 0, 1, 1, 1, 1, BufIm2col);
-  cout << "=== BufIm2col ===\n";
-  printTensor(BufIm2col, {C * KH * KW, OH * OW});
-  cout << string(80, '-') << "\n\n";
+  CONV_DEBUG(
+    cout << "=== BufIm2col ===\n";
+    printTensor(BufIm2col, {C * KH * KW, OH * OW});
+    cout << string(80, '-') << "\n\n";
+  )
 
   // Post-im2col GEMM
   {
@@ -104,18 +100,20 @@ void conv_im2col(const float *Input, float *Kernel, float *Output, unsigned C,
     unsigned Mgemm = M;
     unsigned N = OH * OW;
     unsigned K = C * KH * KW;
-    unsigned rsa = C * KW * KW;
+    unsigned rsa = K;
     unsigned csa = 1;
-    unsigned rsb = OH * OW;
+    unsigned rsb = N;
     unsigned csb = 1;
-    unsigned rsc = OH * OW;
+    unsigned rsc = N;
     unsigned csc = 1;
-    cout << Mgemm << " x " << K << " x " << N << " gemm\n";
+    CONV_DEBUG(cout << Mgemm << " x " << K << " x " << N << " gemm\n";)
     bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, Mgemm, N, K, &alpha, Kernel,
               rsa, csa, BufIm2col, rsb, csb, &beta, Output, rsc, csc);
-    cout << "=== OutputIm2col ===\n";
-    printTensor(Output, {Mgemm, N});
-    cout << string(80, '-') << "\n\n";
+    CONV_DEBUG(
+      cout << "=== OutputIm2col ===\n";
+      printTensor(Output, {Mgemm, N});
+      cout << string(80, '-') << "\n\n";
+    )
   }
 }
 
@@ -127,9 +125,11 @@ void conv_mec(const float *Input, float *Kernel, float *Output, unsigned C,
 
   // MEC
   float *BufMec = mec(Input, C, H, W, KH, KW, 0, 0, 1, 1, 1, 1);
-  cout << "=== BufMec ===\n";
-  printTensor(BufMec, {OW, H * KW});
-  cout << string(80, '-') << "\n\n";
+  CONV_DEBUG(
+    cout << "=== BufMec ===\n";
+    printTensor(BufMec, {OW, H * KW});
+    cout << string(80, '-') << "\n\n";
+  )
 
   // Post-mec GEMM
   {
@@ -143,20 +143,22 @@ void conv_mec(const float *Input, float *Kernel, float *Output, unsigned C,
     unsigned csb = 1;
     unsigned rsc = OH * OW;
     unsigned csc = 1;
-    cout << Mgemm << " x " << K << " x " << N << " gemm\n";
+    CONV_DEBUG(cout << Mgemm << " x " << K << " x " << N << " gemm\n";)
     for (unsigned h = 0; h < OH; ++h) {
       bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_TRANSPOSE, Mgemm, N, K, &alpha, Kernel,
                 rsa, csa, BufMec + h * KW, rsb, csb, &beta, Output + h * OW,
                 rsc, csc);
-      // printTensor(tmp, {M, OW});
     }
-    cout << "=== OutputMec ===\n";
-    printTensor(Output, {M, OH * OW});
-    cout << string(80, '-') << "\n\n";
+    CONV_DEBUG(
+      cout << "=== OutputMec ===\n";
+      printTensor(Output, {M, OH * OW});
+      cout << string(80, '-') << "\n\n";
+    )
   }
 }
 
 #define MIN(a, b) a < b ? a : b
+// Block is row-major
 void packA(float *Block, float *&Pack, unsigned LDA, unsigned MC, unsigned KC) {
   unsigned To = 0;
   for (unsigned ic = 0; ic < MC; ic += BLOCK_MR) {
@@ -172,6 +174,7 @@ void packA(float *Block, float *&Pack, unsigned LDA, unsigned MC, unsigned KC) {
   }
 }
 
+// Block is row-major
 void packB(float *Block, float *&Pack, unsigned LDB, unsigned KC, unsigned NC) {
   unsigned To = 0;
   for (unsigned jc = 0; jc < NC; jc += BLOCK_NR) {
@@ -219,23 +222,23 @@ void mm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
     for (unsigned k = 0; k < K; k += BLOCK_KC) {
 
       unsigned KC = MIN(K - k, BLOCK_KC);
-      
-      Beta = k == 0 ? 0.0 : 1.0; // Accumulate
-      
+
+      Beta = k == 0 ? 0.0 : 1.0; // Accumulate or not
+
       packB(B + k * LDB + jc, BPack, LDB, KC, NC);
-      
+
       for (unsigned ic = 0; ic < M; ic += BLOCK_MC) {
-      
+
         unsigned MC = MIN(M - ic, BLOCK_MC);
 
         packA(A + ic * LDA + k, APack, LDA, MC, KC);
-        
+
         for (unsigned jr = 0; jr < NC; jr += BLOCK_NR) {
-          
+
           unsigned NR = MIN(NC - jr, BLOCK_NR);
 
           for (unsigned ir = 0; ir < MC; ir += BLOCK_MR) {
-        
+
             unsigned MR = MIN(MC - ir, BLOCK_MR);
 
             float *Ar = APack + ir * KC;
@@ -256,7 +259,92 @@ void mm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
     }
   }
 }
-#undef MIN
 
-// void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
-//               unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW) {
+// Input: C x H x W
+void packInputAsB(float *Input, float *&Pack, unsigned Ks, unsigned Ns, unsigned KC, unsigned NC, unsigned C, unsigned H, unsigned W, unsigned KH, unsigned KW, unsigned OW) {
+  unsigned To = 0;
+  for (unsigned jc = 0; jc < NC; jc += BLOCK_NR) {
+    for (unsigned k = 0; k < KC; ++k) {
+      unsigned NR = MIN(NC - jc, BLOCK_NR);
+      for (unsigned jr = 0; jr < NR; ++jr) {
+        unsigned patch = Ns + jc + jr;
+        unsigned channel = (Ks + k) / (KH * KW);
+        unsigned patch_row = ((Ks + k) % (KH * KW)) / KW;
+        unsigned patch_col = ((Ks + k) % (KH * KW)) % KW;
+        unsigned From = channel * H * W + (patch / OW) * W + patch % OW + patch_row * W + patch_col;
+        Pack[To++] = Input[From];
+      }
+      for (unsigned End = To + BLOCK_NR - NR; To != End; ++To)
+        Pack[To] = 0.0;
+    }
+  }
+}
+
+void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
+              unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW) {
+
+  auto *APack = (float *)aligned_alloc(4096, BLOCK_MC * BLOCK_KC * sizeof(float));
+  auto *BPack = (float *)aligned_alloc(4096, BLOCK_KC * BLOCK_NC * sizeof(float));
+  auto *CBuff = (float *)aligned_alloc(4096, BLOCK_MR * BLOCK_NR * sizeof(float));
+
+  auto *cntx = bli_gks_query_cntx();
+  auto *data = new auxinfo_t;
+
+  unsigned OH = H - KH + 1, OW = W - KW + 1;
+  unsigned K = C * KH * KW;
+  unsigned N = OH * OW;
+
+  unsigned LDA = K, LDC = N;
+
+  float Alpha = 1.0, Beta = 0.0, Zero = 0.0;
+
+  for (unsigned jc = 0; jc < N; jc += BLOCK_NC) {
+
+    unsigned NC = MIN(N - jc, BLOCK_NC);
+
+    for (unsigned k = 0; k < K; k += BLOCK_KC) {
+
+      unsigned KC = MIN(K - k, BLOCK_KC);
+
+      Beta = k == 0 ? 0.0 : 1.0; // Accumulate
+
+      packInputAsB(Input, BPack, k, jc, KC, NC, C, H, W, KH, KW, OW);
+
+      for (unsigned ic = 0; ic < M; ic += BLOCK_MC) {
+
+        unsigned MC = MIN(M - ic, BLOCK_MC);
+
+        packA(Kernel + ic * LDA + k, APack, LDA, MC, KC);
+
+        for (unsigned jr = 0; jr < NC; jr += BLOCK_NR) {
+
+          unsigned NR = MIN(NC - jr, BLOCK_NR);
+
+          for (unsigned ir = 0; ir < MC; ir += BLOCK_MR) {
+
+            unsigned MR = MIN(MC - ir, BLOCK_MR);
+
+            float *Ar = APack + ir * KC;
+            float *Br = BPack + jr * KC;
+            float *Cr = Output + (ic + ir) * LDC + jc + jr;
+
+            if ((MR == BLOCK_MR) && (NR == BLOCK_NR))
+              bli_sgemm_haswell_asm_6x16(KC, &Alpha, Ar, Br, &Beta,
+                  Cr, LDC, 1, data, cntx);
+            else {
+              bli_sgemm_haswell_asm_6x16(KC, &Alpha, Ar, Br, &Zero,
+                  CBuff, BLOCK_NR, 1, data, cntx);
+              sxpby(CBuff, Cr, MR, NR, BLOCK_NR, LDC, Beta);
+            }
+          }
+        }
+      }
+    }
+  }
+  CONV_DEBUG(
+    cout << "=== OutputConvGemm ===\n";
+    printTensor(Output, {M, N});
+    cout << string(80, '-') << "\n\n";
+  )
+}
+#undef MIN
