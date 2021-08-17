@@ -15,61 +15,106 @@ int main(int argc, char **argv) {
   int ret = 0;
 
   // Calculate Output dimensions
-  unsigned OH = H_ - KH_ + 1;
-  unsigned OW = W_ - KW_ + 1;
+  unsigned OH_ = H_ - KH_ + 1;
+  unsigned OW_ = W_ - KW_ + 1;
 
-  // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-  // +++ im2col and packing +++
-  // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-  // Init Input
-  float *Input = allocateFilledTensor(C_ * H_ * W_);
-  MAIN_DEBUG(
-    cout << "=== Input ===\n";
-    printTensor(Input, {C_, H_, W_});
-    cout << string(80, '-') << "\n\n";
-  )
+  // // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  // // +++ im2col and packing +++
+  // // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  // // Init Input
+  // float *Input = allocateFilledTensor(C_ * H_ * W_);
+  // MAIN_DEBUG(
+  //   cout << "=== Input ===\n";
+  //   printTensor(Input, {C_, H_, W_});
+  //   cout << string(80, '-') << "\n\n";
+  // )
 
-  // im2col
-  float *im2colBuf = allocateFilledTensor(C_ * KH_ * KW_ * OH * OW);
-  im2col_cpu(Input, C_, H_, W_, KH_, KW_, 0, 0, 1, 1, 1, 1, im2colBuf);
-  MAIN_DEBUG(
-    cout << "=== im2col ===\n";
-    printTensor(im2colBuf, {C_ * KH_ * KW_, OH * OW});
-    cout << string(80, '-') << "\n\n";
-  )
+  // // im2col
+  // float *im2colBuf = allocateFilledTensor(C_ * KH_ * KW_ * OH_ * OW_);
+  // im2col_cpu(Input, C_, H_, W_, KH_, KW_, 0, 0, 1, 1, 1, 1, im2colBuf);
+  // MAIN_DEBUG(
+  //   cout << "=== im2col ===\n";
+  //   printTensor(im2colBuf, {C_ * KH_ * KW_, OH_ * OW_});
+  //   cout << string(80, '-') << "\n\n";
+  // )
 
-  // Block sizes
-  unsigned KC = C_ * KH_ * KW_, NC = OH * OW, NCBlock = NC;
-  if (NC % BLOCK_NR)
-    NCBlock += BLOCK_NR - NC % BLOCK_NR;
-  float *BPackIm2col = allocateTensor(KC * NCBlock);
-  MAIN_DEBUG(
-    cout << KC << " x " << NCBlock << "\n";
-  )
+  // // Block sizes
+  // unsigned KC = C_ * KH_ * KW_, NC = OH_ * OW_, NCBlock = NC;
+  // if (NC % BLOCK_NR)
+  //   NCBlock += BLOCK_NR - NC % BLOCK_NR;
+  // float *BPackIm2col = allocateTensor(KC * NCBlock);
+  // MAIN_DEBUG(
+  //   cout << KC << " x " << NCBlock << "\n";
+  // )
 
-  // Pack im2col
-  packB(im2colBuf, BPackIm2col, NC, KC, NC);
-  MAIN_DEBUG(
-    cout << "=== im2col, then pack ===\n";
-    printTensor(BPackIm2col, {KC * NCBlock / BLOCK_NR, BLOCK_NR});
-    cout << string(80, '-') << "\n\n";
-  )
+  // // Pack im2col
+  // packB(im2colBuf, BPackIm2col, NC, KC, NC);
+  // MAIN_DEBUG(
+  //   cout << "=== im2col, then pack ===\n";
+  //   printTensor(BPackIm2col, {KC * NCBlock / BLOCK_NR, BLOCK_NR});
+  //   cout << string(80, '-') << "\n\n";
+  // )
 
-  // Fused im2col+packB
-  float *BPack = allocateTensor(KC * NC);
-  packInputAsB(Input, BPack, 0, 0, KC, NC, C_, H_, W_, KH_, KW_, OW);
-  MAIN_DEBUG(
-    cout << "=== im2col&pack ===\n";
-    printTensor(BPack, {KC * NCBlock / BLOCK_NR, BLOCK_NR});
-    cout << string(80, '-') << "\n\n";
-  )
-  // --------------------------------------------------------------------------
-  // --------------------------------------------------------------------------
-  // --------------------------------------------------------------------------
+  // // Fused im2col+packB
+  // float *BPack = allocateTensor(KC * NCBlock);
+  // im2colPackB(Input, BPack, 0, 0, KC, NC, C_, H_, W_, KH_, KW_, OW_);
+  // MAIN_DEBUG(
+  //   cout << "=== im2col&pack ===\n";
+  //   printTensor(BPack, {KC * NCBlock / BLOCK_NR, BLOCK_NR});
+  //   cout << string(80, '-') << "\n\n";
+  // )
+  // // ------------------------------------------------------------------------
 
-  // // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  // // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  // // +++ MEC and packing +++
+  // // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  // // Init Input
+  // float *Input = allocateFilledTensor(C_ * H_ * W_);
+  // MAIN_DEBUG(
+  //   cout << "=== Input ===\n";
+  //   printTensor(Input, {C_, H_, W_});
+  //   cout << string(80, '-') << "\n\n";
+  // )
+
+  // // MEC
+  // float *MECBuf = allocateFilledTensor(C_ * W_ * KW_ * OW_);
+  // mec(Input, C_, H_, W_, KH_, KW_, 0, 0, 1, 1, 1, 1, MECBuf);
+  // MAIN_DEBUG(
+  //   cout << "=== MEC ===\n";
+  //   printTensor(MECBuf, {C_ * H_ * KW_, OW_});
+  //   cout << string(80, '-') << "\n\n";
+  // )
+
+  // // Block sizes
+  // unsigned KC = C_ * H_ * KW_, NC = OW_, NCBlock = NC;
+  // if (NC % BLOCK_NR)
+  //   NCBlock += BLOCK_NR - NC % BLOCK_NR;
+  // float *BPackMEC = allocateTensor(KC * NCBlock);
+  // MAIN_DEBUG(
+  //   cout << KC << " x " << NCBlock << "\n";
+  // )
+
+  // // Pack MECBuf
+  // packB(MECBuf, BPackMEC, NC, KC, NC);
+  // MAIN_DEBUG(
+  //   cout << "=== MEC, then pack ===\n";
+  //   printTensor(BPackMEC, {KC * NCBlock / BLOCK_NR, BLOCK_NR});
+  //   cout << string(80, '-') << "\n\n";
+  // )
+
+  // // Fused MEC & pack (yaconv)
+  // float *BPack = allocateTensor(KC * NCBlock);
+  // yaconvPackB(Input, BPack, 0, 0, KC, NC, C_, H_, W_, KH_, KW_, OW_);
+  // MAIN_DEBUG(
+  //   cout << "=== Fused MEC & pack (yaconv) ===\n";
+  //   printTensor(BPack, {KC * NCBlock / BLOCK_NR, BLOCK_NR});
+  //   cout << string(80, '-') << "\n\n";
+  // )
+  // // ------------------------------------------------------------------------
+
+  // // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   // // +++ Convolution +++
-  // // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  // // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   // // Init Kernel
   // float *Kernel = allocateFilledTensor(M_ * C_ * KH_ * KW_);
   // MAIN_DEBUG(
@@ -87,30 +132,28 @@ int main(int argc, char **argv) {
   // )
 
   // // Convolution with im2col
-  // float *OutputIm2col = allocateTensor(M_ * OH * OW);
-  // conv_im2col(Input, Kernel, OutputIm2col, C_, H_, W_, M_, KH_, KW_, OH, OW, 0,
+  // float *OutputIm2col = allocateTensor(M_ * OH_ * OW_);
+  // convIm2col(Input, Kernel, OutputIm2col, C_, H_, W_, M_, KH_, KW_, OH_, OW_, 0,
   //             0, 1, 1, 1, 1);
 
-  // // Convolution with fused im2col+packing
-  // float *OutputConvGemm = allocateTensor(M_ * OH * OW);
-  // convGemm(Input, Kernel, OutputConvGemm, C_, H_, W_, M_, KH_, KW_);
+  // // // Convolution with fused im2col+packing
+  // // float *OutputConvGemm = allocateTensor(M_ * OH_ * OW_);
+  // // convGemm(Input, Kernel, OutputConvGemm, C_, H_, W_, M_, KH_, KW_);
 
-  // if (!tensorsEqual(OutputIm2col, OutputConvGemm, M_ * OH * OW))
+  // // Convolution with MEC
+  // float *OutputMEC = allocateTensor(M_ * OH_ * OW_);
+  // convMEC(Input, Kernel, OutputMEC, C_, H_, W_, M_, KH_, KW_, OH_, OW_, 0, 0, 1,
+  //         1, 1, 1);
+
+  // if (!tensorsEqual(OutputIm2col, OutputMEC, M_ * OH_ * OW_))
   //   ret = -1;
-
-  // // // Convolution with MEC
-  // // float *OutputMec = allocateTensor(M_ * OH * OW);
-  // // conv_mec(Input, Kernel, OutputMec, C_, H_, W_, M_, KH_, KW_, OH, OW, 0, 0, 1,
-  // //          1, 1, 1);
-  // // --------------------------------------------------------------------------
-  // // --------------------------------------------------------------------------
-  // // --------------------------------------------------------------------------
+  // // ------------------------------------------------------------------------
 
 
 
-  // // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  // // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   // // +++ GEMM +++
-  // // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  // // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   // if (argc != 4) {
   //   cerr << "Usage: ./yaconv M K N\n";
   //   return -1;
@@ -156,9 +199,7 @@ int main(int argc, char **argv) {
   //   printTensor(CMine, {M, N});
   //   printTensor(CBLIS, {M, N});
   // )
-  // // --------------------------------------------------------------------------
-  // // --- GEMM ---
-  // // --------------------------------------------------------------------------
+  // // ------------------------------------------------------------------------
 
   return ret;
 }
