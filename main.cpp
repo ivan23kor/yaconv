@@ -159,15 +159,16 @@ int main(int argc, char **argv) {
   //   return -1;
   // }
 
-  // unsigned M = atoi(argv[1]);
-  // unsigned K = atoi(argv[2]);
-  // unsigned N = atoi(argv[3]);
+  // const unsigned M = atoi(argv[1]);
+  // const unsigned K = atoi(argv[2]);
+  // const unsigned N = atoi(argv[3]);
+  // const unsigned Flops = 2 * M * K * N;
 
   // // Gemm
-  // float *A = allocateFilledTensor(M * K);
-  // float *B = allocateFilledTensor(K * N);
-  // // float *A = allocateRandomTensor(M * K);
-  // // float *B = allocateRandomTensor(K * N);
+  // // float *A = allocateFilledTensor(M * K);
+  // // float *B = allocateFilledTensor(K * N);
+  // float *A = allocateRandomTensor(M * K);
+  // float *B = allocateRandomTensor(K * N);
   // float *CBLIS = allocateTensor(M * N);
   // float *CMine = allocateTensor(M * N);
   // MAIN_DEBUG(
@@ -186,11 +187,12 @@ int main(int argc, char **argv) {
 
   // // My gemm
   // t1 = high_resolution_clock::now();
-  // mm(A, B, CMine, M, K, N, K, N, N);
+  // gemm(A, B, CMine, M, K, N, K, N, N, Alpha, Beta);
   // t2 = high_resolution_clock::now();
   // double Mine = duration_cast<duration<double>>(t2 - t1).count();
 
-  // cout << BLIS / Mine << "\n";
+  // cout << "BLIS: " << Flops / BLIS * 1e-9 << " GFLOPS\n";
+  // cout << "Mine: " << Flops / Mine * 1e-9 << " GFLOPS\n";
 
   // if (!tensorsEqual(CMine, CBLIS, M * N))
   //   ret = -1;

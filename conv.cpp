@@ -1,4 +1,5 @@
 #include "config.h"
+#include "conv.h"
 #include "utils.h"
 #include <algorithm>
 #include <blis.h>
@@ -12,7 +13,6 @@ using namespace std;
 
 #define CONV_DEBUG(expr) if (DEBUG == 1) {expr;}
 #define MIN(a, b) a < b ? a : b
-
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //+++ im2col +++
@@ -199,8 +199,7 @@ void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
   auto *cntx = bli_gks_query_cntx();
   auto *data = new auxinfo_t;
 
-  const unsigned OH = (H - KH + 2 * PadH) / StrideH + 1;
-  const unsigned OW = (W - KW + 2 * PadW) / StrideW + 1;
+  const unsigned OH = (H - KH) + 1, OW = (W - KW) + 1;
 
   unsigned K = C * KH * KW;
   unsigned N = OH * OW;
@@ -245,7 +244,8 @@ void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
             else {
               bli_sgemm_haswell_asm_6x16(KC, &Alpha, Ar, Br, &Zero,
                   CBuff, BLOCK_NR, 1, data, cntx);
-              sxpby(CBuff, Cr, MR, NR, BLOCK_NR, LDC, Beta);
+              bli_saxpym(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE,
+                  MR, NR, &Alpha, CBuff, BLOCK_NR, 1, Cr, LDC, 1);
             }
           }
         }
@@ -293,8 +293,7 @@ void yaconv(float *Input, float *Kernel, float *Output, unsigned C,
   auto *cntx = bli_gks_query_cntx();
   auto *data = new auxinfo_t;
 
-  const unsigned OH = (H - KH + 2 * PadH) / StrideH + 1;
-  const unsigned OW = (W - KW + 2 * PadW) / StrideW + 1;
+  const unsigned OH = (H - KH) + 1, OW = (W - KW) + 1;
 
   unsigned K = C * KH * KW;
   unsigned N = OH * OW;
@@ -339,7 +338,8 @@ void yaconv(float *Input, float *Kernel, float *Output, unsigned C,
             else {
               bli_sgemm_haswell_asm_6x16(KC, &Alpha, Ar, Br, &Zero,
                   CBuff, BLOCK_NR, 1, data, cntx);
-              sxpby(CBuff, Cr, MR, NR, BLOCK_NR, LDC, Beta);
+              bli_saxpym(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE,
+                  MR, NR, &Alpha, CBuff, BLOCK_NR, 1, Cr, LDC, 1);
             }
           }
         }
@@ -347,7 +347,7 @@ void yaconv(float *Input, float *Kernel, float *Output, unsigned C,
     }
   }
   CONV_DEBUG(
-    cout << "=== OutputConvGemm ===\n";
+    cout << "=== OutputYaConv ===\n";
     printTensor(Output, {M, N});
     cout << string(80, '-') << "\n\n";
   )
@@ -390,22 +390,8 @@ void packB(float *Block, float *&Pack, unsigned LDB, unsigned KC, unsigned NC) {
   }
 }
 
-void sxpby(const float *restrict X, float *restrict Y, unsigned M, unsigned N,
-            unsigned LDX, unsigned LDY, const float Beta) {
-    if (Beta == 0.0)
-      for(unsigned i = 0; i < M; ++i)
-        for(unsigned j = 0; j < N; ++j)
-          *(Y + i * LDY + j) = *(X + i * LDX + j);
-    else
-      for(unsigned i = 0; i < M; ++i)
-        for(unsigned j = 0; j < N; ++j) {
-          *(Y + i * LDY + j) *= Beta;
-          *(Y + i * LDY + j) += *(X + i * LDX + j);
-        }
-}
-
-void mm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
-        unsigned LDA, unsigned LDB, unsigned LDC) {
+void gemm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
+          unsigned LDA, unsigned LDB, unsigned LDC, float Alpha, float Beta) {
 
   auto *APack = (float *)aligned_alloc(4096, BLOCK_MC * BLOCK_KC * sizeof(float));
   auto *BPack = (float *)aligned_alloc(4096, BLOCK_KC * BLOCK_NC * sizeof(float));
@@ -414,7 +400,7 @@ void mm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
   auto *cntx = bli_gks_query_cntx();
   auto *data = new auxinfo_t;
 
-  float Alpha = 1.0, Beta = 0.0, Zero = 0.0;
+  float Zero = 0.0;
   for (unsigned jc = 0; jc < N; jc += BLOCK_NC) {
 
     unsigned NC = MIN(N - jc, BLOCK_NC);
@@ -423,7 +409,7 @@ void mm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
 
       unsigned KC = MIN(K - k, BLOCK_KC);
 
-      Beta = k == 0 ? 0.0 : 1.0; // Accumulate or not
+      float Beta_ = k == 0 ? Beta : 1.0; // Accumulate or not
 
       packB(B + k * LDB + jc, BPack, LDB, KC, NC);
 
@@ -446,12 +432,13 @@ void mm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
             float *Cr = C + (ic + ir) * LDC + jc + jr;
 
             if ((MR == BLOCK_MR) && (NR == BLOCK_NR))
-              bli_sgemm_haswell_asm_6x16(KC, &Alpha, Ar, Br, &Beta,
+              bli_sgemm_haswell_asm_6x16(KC, &Alpha, Ar, Br, &Beta_,
                   Cr, LDC, 1, data, cntx);
             else {
               bli_sgemm_haswell_asm_6x16(KC, &Alpha, Ar, Br, &Zero,
                   CBuff, BLOCK_NR, 1, data, cntx);
-              sxpby(CBuff, Cr, MR, NR, BLOCK_NR, LDC, Beta);
+              bli_saxpym(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE,
+                  MR, NR, &Alpha, CBuff, BLOCK_NR, 1, Cr, LDC, 1);
             }
           }
         }
