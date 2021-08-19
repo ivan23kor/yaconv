@@ -58,9 +58,12 @@ int main(int argc, char **argv) {
   t2 = high_resolution_clock::now();
   double MineTime = duration_cast<duration<double>>(t2 - t1).count();
 
-  cout << "BLIS: " << Flops / BLISTime * 1e-9 << " GFLOPS\n";
-  cout << "BLAS: " << Flops / BLASTime * 1e-9 << " GFLOPS\n";
-  cout << "Mine: " << Flops / MineTime * 1e-9 << " GFLOPS\n";
+  cout << "BLIS: " << BLISTime << "\n";
+  cout << "BLAS: " << BLASTime << "\n";
+  cout << "Mine: " << MineTime << "\n";
+  //cout << "BLIS: " << Flops / BLISTime * 1e-9 << " GFLOPS\n";
+  //cout << "BLAS: " << Flops / BLASTime * 1e-9 << " GFLOPS\n";
+  //cout << "Mine: " << Flops / MineTime * 1e-9 << " GFLOPS\n";
 
   MAIN_DEBUG(
     cout << "BLIS:\n";

@@ -2,11 +2,14 @@
 #include "gemm.h"
 #include "utils.h"
 #include <blis.h>
+#include <chrono>
 #include <iostream>
 #include <stdlib.h>
 
 
 using namespace std;
+using namespace std::chrono;
+
 
 
 #define CONV_DEBUG(expr) if (DEBUG == 1) {expr;}
@@ -23,7 +26,7 @@ unsigned BLOCK_MR = bli_cntx_get_blksz(BLIS_MR, cntx)->v[0];
 unsigned BLOCK_NR = bli_cntx_get_blksz(BLIS_NR, cntx)->v[0];
 unsigned BLOCK_MC = bli_cntx_get_blksz(BLIS_MC, cntx)->v[0];
 unsigned BLOCK_KC = bli_cntx_get_blksz(BLIS_KC, cntx)->v[0];
-unsigned BLOCK_NC = bli_cntx_get_blksz(BLIS_NC, cntx)->v[0];
+unsigned BLOCK_NC = bli_cntx_get_blksz(BLIS_NC, cntx)->v[0] * 2;
 
 }; // abstract namespace
 
@@ -83,8 +86,8 @@ void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
   // im2col
   float *BufIm2col = allocateTensor(C * KH * KW * OH * OW);
   im2col(Input, C, H, W, KH, KW, 0, 0, 1, 1, 1, 1, BufIm2col);
+  cout << "=== BufIm2col (" << C * KH * KW * OH * OW << " elements) ===\n";
   CONV_DEBUG(
-    cout << "=== BufIm2col ===\n";
     printTensor(BufIm2col, {C * KH * KW, OH * OW});
     cout << string(80, '-') << "\n\n";
   )
@@ -101,8 +104,128 @@ void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
     unsigned rsc = N;
     unsigned csc = 1;
     CONV_DEBUG(cout << M << " x " << K << " x " << N << " gemm\n";)
-    bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &alpha, Kernel,
-              rsa, csa, BufIm2col, rsb, csb, &beta, Output, rsc, csc);
+    gemm(Kernel, BufIm2col, Output, M, K, N, K, N, N, 1.0, 0.0);
+    // bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &alpha, Kernel,
+    //           rsa, csa, BufIm2col, rsb, csb, &beta, Output, rsc, csc);
+  }
+}
+//---------------------------------------------------------------------------
+
+
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//+++ Fused im2col & packing +++
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// Input: C x H x W
+inline void im2colPackB(float *Input, float *&Pack, unsigned Ks, unsigned Ns, unsigned KC, unsigned NC, unsigned C, unsigned H, unsigned W, unsigned KH, unsigned KW, unsigned OW) {
+  unsigned To = 0;
+  for (unsigned jc = 0; jc < NC; jc += BLOCK_NR) {
+    for (unsigned k = 0; k < KC; ++k) {
+      unsigned NR = MIN(NC - jc, BLOCK_NR);
+      for (unsigned jr = 0; jr < NR; ++jr) {
+        unsigned patch = Ns + jc + jr;
+        unsigned channel = (Ks + k) / (KH * KW);
+        unsigned patch_row = ((Ks + k) % (KH * KW)) / KW;
+        unsigned patch_col = ((Ks + k) % (KH * KW)) % KW;
+        unsigned From = channel * H * W + (patch / OW) * W + patch % OW + patch_row * W + patch_col;
+        Pack[To++] = Input[From];
+      }
+      for (unsigned End = To + BLOCK_NR - NR; To != End; ++To)
+        Pack[To] = 0.0;
+    }
+  }
+}
+
+void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
+              unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW) {
+
+  auto *APack = (float *)aligned_alloc(4096, BLOCK_MC * BLOCK_KC * sizeof(float));
+  auto *BPack = (float *)aligned_alloc(4096, BLOCK_KC * BLOCK_NC * sizeof(float));
+  auto *CBuff = (float *)aligned_alloc(4096, BLOCK_MR * BLOCK_NR * sizeof(float));
+
+  const unsigned OH = H - KH + 1, OW = W - KW + 1;
+
+  const unsigned K = C * KH * KW;
+  const unsigned N = OH * OW;
+  const unsigned LDA = K, LDC = N;
+
+  float Alpha = 1.0, Zero = 0.0;
+  high_resolution_clock::time_point t1, t2;
+  double PackATime = 0.0, PackBTime = 0.0;
+  for (unsigned jc = 0; jc < N; jc += BLOCK_NC) {
+
+    unsigned NC = MIN(N - jc, BLOCK_NC);
+
+    for (unsigned k = 0; k < K; k += BLOCK_KC) {
+
+      unsigned KC = MIN(K - k, BLOCK_KC);
+
+      float Beta = k == 0 ? 0.0 : 1.0; // Accumulate or not
+
+      t1 = high_resolution_clock::now();
+      im2colPackB(Input, BPack, k, jc, KC, NC, C, H, W, KH, KW, OW);
+      t2 = high_resolution_clock::now();
+      PackBTime += duration_cast<duration<double>>(t2 - t1).count();
+
+      for (unsigned ic = 0; ic < M; ic += BLOCK_MC) {
+
+        unsigned MC = MIN(M - ic, BLOCK_MC);
+
+        t1 = high_resolution_clock::now();
+        packA(Kernel + ic * LDA + k, APack, LDA, MC, KC);
+        t2 = high_resolution_clock::now();
+        PackATime += duration_cast<duration<double>>(t2 - t1).count();
+
+        for (unsigned jr = 0; jr < NC; jr += BLOCK_NR) {
+
+          unsigned NR = MIN(NC - jr, BLOCK_NR);
+
+          for (unsigned ir = 0; ir < MC; ir += BLOCK_MR) {
+
+            unsigned MR = MIN(MC - ir, BLOCK_MR);
+
+            float *Ar = APack + ir * KC;
+            float *Br = BPack + jr * KC;
+            float *Cr = Output + (ic + ir) * LDC + jc + jr;
+
+            if ((MR == BLOCK_MR) && (NR == BLOCK_NR))
+              bli_sgemm_haswell_asm_6x16(KC, &Alpha, Ar, Br, &Beta,
+                  Cr, LDC, 1, data, cntx);
+            else {
+              bli_sgemm_haswell_asm_6x16(KC, &Alpha, Ar, Br, &Zero,
+                  CBuff, BLOCK_NR, 1, data, cntx);
+              bli_saxpym(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE,
+                  MR, NR, &Alpha, CBuff, BLOCK_NR, 1, Cr, LDC, 1);
+            }
+          }
+        }
+      }
+    }
+  }
+  std::cout << "PackATime: " << PackATime << "\n";
+  std::cout << "PackBTime: " << PackBTime << "\n";
+}
+//---------------------------------------------------------------------------
+
+
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//+++ Yaconv +++
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// Input: C x H x W
+void yaconvPackB(float *Input, float *&Pack, unsigned Ks, unsigned Ns, unsigned KC, unsigned NC, unsigned C, unsigned H, unsigned W, unsigned KH, unsigned KW, unsigned OW) {
+  unsigned To = 0;
+  for (unsigned jc = Ns; jc < Ns + NC; jc += BLOCK_NR) {
+    for (unsigned k = Ks; k < Ks + KC; ++k) {
+      unsigned NR = MIN(NC - jc, BLOCK_NR);
+      for (unsigned jr = 0; jr < NR; ++jr) {
+        unsigned channel = k / (H * KW);
+        unsigned row = (k % (H * KW)) / KW;
+        unsigned col = (k % (H * KW)) % KW;
+        unsigned From = channel * H * W + row * W + col + jc + jr;
+        Pack[To++] = Input[From];
+      }
+      for (unsigned End = To + BLOCK_NR - NR; To != End; ++To)
+        Pack[To] = 0.0;
+    }
   }
 }
 //---------------------------------------------------------------------------
@@ -163,115 +286,6 @@ void convMEC(const float *Input, float *Kernel, float *Output, unsigned C,
       bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_TRANSPOSE, M, N, K, &alpha, Kernel,
                 rsa, csa, BufMEC + h * KW, rsb, csb, &beta, Output + h * OW,
                 rsc, csc);
-    }
-  }
-}
-//---------------------------------------------------------------------------
-
-
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//+++ Fused im2col & packing +++
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// Input: C x H x W
-void im2colPackB(float *Input, float *&Pack, unsigned Ks, unsigned Ns, unsigned KC, unsigned NC, unsigned C, unsigned H, unsigned W, unsigned KH, unsigned KW, unsigned OW) {
-  unsigned To = 0;
-  for (unsigned jc = 0; jc < NC; jc += BLOCK_NR) {
-    for (unsigned k = 0; k < KC; ++k) {
-      unsigned NR = MIN(NC - jc, BLOCK_NR);
-      for (unsigned jr = 0; jr < NR; ++jr) {
-        unsigned patch = Ns + jc + jr;
-        unsigned channel = (Ks + k) / (KH * KW);
-        unsigned patch_row = ((Ks + k) % (KH * KW)) / KW;
-        unsigned patch_col = ((Ks + k) % (KH * KW)) % KW;
-        unsigned From = channel * H * W + (patch / OW) * W + patch % OW + patch_row * W + patch_col;
-        Pack[To++] = Input[From];
-      }
-      for (unsigned End = To + BLOCK_NR - NR; To != End; ++To)
-        Pack[To] = 0.0;
-    }
-  }
-}
-
-void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
-              unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW) {
-
-  auto *APack = (float *)aligned_alloc(4096, BLOCK_MC * BLOCK_KC * sizeof(float));
-  auto *BPack = (float *)aligned_alloc(4096, BLOCK_KC * BLOCK_NC * sizeof(float));
-  auto *CBuff = (float *)aligned_alloc(4096, BLOCK_MR * BLOCK_NR * sizeof(float));
-
-  const unsigned OH = (H - KH) + 1, OW = (W - KW) + 1;
-
-  const unsigned K = C * KH * KW;
-  const unsigned N = OH * OW;
-  const unsigned LDA = K, LDC = N;
-
-  float Alpha = 1.0, Zero = 0.0;
-  for (unsigned jc = 0; jc < N; jc += BLOCK_NC) {
-
-    unsigned NC = MIN(N - jc, BLOCK_NC);
-
-    for (unsigned k = 0; k < K; k += BLOCK_KC) {
-
-      unsigned KC = MIN(K - k, BLOCK_KC);
-
-      float Beta = k == 0 ? 0.0 : 1.0; // Accumulate or not
-
-      im2colPackB(Input, BPack, k, jc, KC, NC, C, H, W, KH, KW, OW);
-
-      for (unsigned ic = 0; ic < M; ic += BLOCK_MC) {
-
-        unsigned MC = MIN(M - ic, BLOCK_MC);
-
-        packA(Kernel + ic * LDA + k, APack, LDA, MC, KC);
-
-        for (unsigned jr = 0; jr < NC; jr += BLOCK_NR) {
-
-          unsigned NR = MIN(NC - jr, BLOCK_NR);
-
-          for (unsigned ir = 0; ir < MC; ir += BLOCK_MR) {
-
-            unsigned MR = MIN(MC - ir, BLOCK_MR);
-
-            float *Ar = APack + ir * KC;
-            float *Br = BPack + jr * KC;
-            float *Cr = Output + (ic + ir) * LDC + jc + jr;
-
-            if ((MR == BLOCK_MR) && (NR == BLOCK_NR))
-              bli_sgemm_haswell_asm_6x16(KC, &Alpha, Ar, Br, &Beta,
-                  Cr, LDC, 1, data, cntx);
-            else {
-              bli_sgemm_haswell_asm_6x16(KC, &Alpha, Ar, Br, &Zero,
-                  CBuff, BLOCK_NR, 1, data, cntx);
-              bli_saxpym(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE,
-                  MR, NR, &Alpha, CBuff, BLOCK_NR, 1, Cr, LDC, 1);
-            }
-          }
-        }
-      }
-    }
-  }
-}
-//---------------------------------------------------------------------------
-
-
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//+++ Yaconv +++
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// Input: C x H x W
-void yaconvPackB(float *Input, float *&Pack, unsigned Ks, unsigned Ns, unsigned KC, unsigned NC, unsigned C, unsigned H, unsigned W, unsigned KH, unsigned KW, unsigned OW) {
-  unsigned To = 0;
-  for (unsigned jc = Ns; jc < Ns + NC; jc += BLOCK_NR) {
-    for (unsigned k = Ks; k < Ks + KC; ++k) {
-      unsigned NR = MIN(NC - jc, BLOCK_NR);
-      for (unsigned jr = 0; jr < NR; ++jr) {
-        unsigned channel = k / (H * KW);
-        unsigned row = (k % (H * KW)) / KW;
-        unsigned col = (k % (H * KW)) % KW;
-        unsigned From = channel * H * W + row * W + col + jc + jr;
-        Pack[To++] = Input[From];
-      }
-      for (unsigned End = To + BLOCK_NR - NR; To != End; ++To)
-        Pack[To] = 0.0;
     }
   }
 }
