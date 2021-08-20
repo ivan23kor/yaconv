@@ -18,15 +18,7 @@ using namespace std::chrono;
 
 namespace {
 
-// BLIS-related stuff
-auto *cntx = bli_gks_query_cntx();
-auto *data = new auxinfo_t;
-
-unsigned BLOCK_MR = bli_cntx_get_blksz(BLIS_MR, cntx)->v[0];
-unsigned BLOCK_NR = bli_cntx_get_blksz(BLIS_NR, cntx)->v[0];
-unsigned BLOCK_MC = bli_cntx_get_blksz(BLIS_MC, cntx)->v[0];
-unsigned BLOCK_KC = bli_cntx_get_blksz(BLIS_KC, cntx)->v[0];
-unsigned BLOCK_NC = bli_cntx_get_blksz(BLIS_NC, cntx)->v[0] * 2;
+#include "set_blis_params.h"
 
 }; // abstract namespace
 
@@ -188,11 +180,10 @@ void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
             float *Cr = Output + (ic + ir) * LDC + jc + jr;
 
             if ((MR == BLOCK_MR) && (NR == BLOCK_NR))
-              bli_sgemm_haswell_asm_6x16(KC, &Alpha, Ar, Br, &Beta,
-                  Cr, LDC, 1, data, cntx);
+              blisGemmUKR(KC, &Alpha, Ar, Br, &Beta, Cr, LDC, 1, data, cntx);
             else {
-              bli_sgemm_haswell_asm_6x16(KC, &Alpha, Ar, Br, &Zero,
-                  CBuff, BLOCK_NR, 1, data, cntx);
+              blisGemmUKR(KC, &Alpha, Ar, Br, &Zero, CBuff, BLOCK_NR, 1,
+                  data, cntx);
               bli_saxpym(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE,
                   MR, NR, &Alpha, CBuff, BLOCK_NR, 1, Cr, LDC, 1);
             }
