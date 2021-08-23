@@ -1,2 +1,8 @@
+# Files copies (or symlinks) of BLIS files
+blis_config.mk
 gemm_microkernel.c
+
+# Build files
+test_conv
+test_gemm
 *.o

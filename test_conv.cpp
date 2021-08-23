@@ -40,6 +40,7 @@ int main(int argc, char **argv) {
 
   // Time variables
   high_resolution_clock::time_point t1, t2;
+  vector<double> Times;
 
   // Convolution with im2col
   float *OutputIm2col = allocateTensor(M * OH * OW);
@@ -47,17 +48,18 @@ int main(int argc, char **argv) {
   convIm2col(Input, Kernel, OutputIm2col, C, H, W, M, KH, KW, OH, OW, 0,
               0, 1, 1, 1, 1);
   t2 = high_resolution_clock::now();
-  double Im2colTime = duration_cast<duration<double>>(t2 - t1).count();
+  Times.push_back(duration_cast<duration<double>>(t2 - t1).count());
 
   // Convolution with fused im2col+packing
   float *OutputConvGemm = allocateTensor(M * OH * OW);
   t2 = high_resolution_clock::now();
   convGemm(Input, Kernel, OutputConvGemm, C, H, W, M, KH, KW);
   t2 = high_resolution_clock::now();
-  double ConvGemmTime = duration_cast<duration<double>>(t2 - t1).count();
+  Times.push_back(duration_cast<duration<double>>(t2 - t1).count());
 
-  cout << "Im2col: " << Im2colTime << "\n";
-  cout << "ConvGemm: " << ConvGemmTime << "\n";
+  // Print times for each run
+  for (const auto &t: Times)
+    cout << t << "\n";
 
   MAIN_DEBUG(
     cout << "OutputIm2col:\n";
