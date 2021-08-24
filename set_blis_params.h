@@ -8,4 +8,4 @@ unsigned BLOCK_MR = bli_cntx_get_blksz(BLIS_MR, cntx)->v[0];
 unsigned BLOCK_NR = bli_cntx_get_blksz(BLIS_NR, cntx)->v[0];
 unsigned BLOCK_MC = bli_cntx_get_blksz(BLIS_MC, cntx)->v[0];
 unsigned BLOCK_KC = bli_cntx_get_blksz(BLIS_KC, cntx)->v[0];
-unsigned BLOCK_NC = bli_cntx_get_blksz(BLIS_NC, cntx)->v[0] * 2;
+unsigned BLOCK_NC = bli_cntx_get_blksz(BLIS_NC, cntx)->v[0];
