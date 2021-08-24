@@ -1,4 +1,4 @@
-#include "conv.h"
+#include "conv.hpp"
 #include "utils.h"
 #include <blis.h>
 #include <cblas.h>
@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
   // Init Kernel
   float *Kernel = allocateFilledTensor(M * C * KH * KW);
   MAIN_DEBUG(
-    printTensor(Kernel, {M, C * KH * KW})
+    printTensor(Kernel, {M, C, KH * KW})
   )
 
   // Init Input
@@ -62,8 +62,11 @@ int main(int argc, char **argv) {
   // Convolution with im2col
   RUN(convIm2col(Input, Kernel, Outputs.back(), C, H, W, M, KH, KW, OH, OW, 0, 0, 1, 1, 1, 1))
 
-  // Convolution with fused im2col+packing
-  RUN(convGemm(Input, Kernel, Outputs.back(), C, H, W, M, KH, KW))
+  // Convolution with MEC for NCHW format
+  RUN(Outputs.back() = convMecNCHW(Input, Kernel, C, H, W, M, KH, KW))
+
+  // // Convolution with fused im2col+packing
+  RUN(Outputs.back() = convGemm(Input, Kernel, C, H, W, M, KH, KW))
 
   // Print times for each run
   for (const auto &Time: Times)

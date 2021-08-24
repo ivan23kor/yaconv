@@ -1,4 +1,4 @@
-#include "gemm.h"
+#include "gemm.hpp"
 #include "utils.h"
 #include <blis.h>
 #include <cblas.h>
@@ -23,10 +23,10 @@ int main(int argc, char **argv) {
   const unsigned N = atoi(argv[3]);
 
   // Gemm
-  // float *A = allocateFilledTensor(M * K);
-  // float *B = allocateFilledTensor(K * N);
-  float *A = allocateRandomTensor(M * K);
-  float *B = allocateRandomTensor(K * N);
+  float *A = allocateFilledTensor(M * K);
+  float *B = allocateFilledTensor(K * N);
+  // float *A = allocateRandomTensor(M * K);
+  // float *B = allocateRandomTensor(K * N);
   MAIN_DEBUG(
     printTensor(A, {M, K});
     printTensor(B, {K, N});
@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
 #define RUN(f) \
   Outputs.push_back(allocateTensor(M * N)); \
   TempTime = 0.0; \
-  for (unsigned i = 0; i < 10; ++i) { \
+  for (unsigned i = 0; i < 1; ++i) { \
     t1 = high_resolution_clock::now(); \
     f; \
     t2 = high_resolution_clock::now(); \
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
   RUN(bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &Alpha, A, K, 1, B, N, 1, &Beta, Outputs.back(), N, 1))
 
   // OpenBLAS gemm
-  RUN(cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, M, N, K, Alpha, A, K, B, N, Beta, Outputs.back(), N))
+  //RUN(cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, M, N, K, Alpha, A, K, B, N, Beta, Outputs.back(), N))
 
   // My gemm
   RUN(gemm(A, B, Outputs.back(), M, K, N, K, N, N, Alpha, Beta))

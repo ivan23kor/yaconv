@@ -1,19 +1,16 @@
-#include "conv.h"
-#include "gemm.h"
+#include "gemm.hpp"
 #include "utils.h"
 #include <blis.h>
 #include <iostream>
 #include <stdlib.h>
 
+namespace {
+#include "set_blis_params.h"
+}; // abstract namespace
+
 #define CONV_DEBUG(expr) if (DEBUG == 1) {expr;}
 #define MIN(a, b) a < b ? a : b
 
-
-namespace {
-
-#include "set_blis_params.h"
-
-}; // abstract namespace
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //+++ Im2col +++
@@ -68,39 +65,116 @@ void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
                 unsigned StrideH, unsigned StrideW, unsigned DilH,
                 unsigned DilW) {
 
-  // im2col
-  float *BufIm2col = allocateTensor(C * KH * KW * OH * OW);
-  im2col(Input, C, H, W, KH, KW, 0, 0, 1, 1, 1, 1, BufIm2col);
+  float *InputBuf = allocateTensor(C * KH * KW * OH * OW);
+  im2col(Input, C, H, W, KH, KW, 0, 0, 1, 1, 1, 1, InputBuf);
+
+  unsigned K = C * KH * KW;
+  unsigned N = OH * OW;
+  unsigned rsa = K;
+  unsigned csa = 1;
+  unsigned rsb = N;
+  unsigned csb = 1;
+  unsigned rsc = N;
+  unsigned csc = 1;
+
   CONV_DEBUG(
-    std::cout << "=== BufIm2col (" << C * KH * KW * OH * OW << " elements) ===\n";
-    printTensor(BufIm2col, {C * KH * KW, OH * OW});
+    std::cout << "=== Im2col ===\n";
+    std::cout << "InputBuf: " << C * KH * KW << " x " << OH * OW << "\n";
+    std::cout << "1 x GEMM[" << M << " x " << K << " x " << N << "]\n";
     std::cout << std::string(80, '-') << "\n\n";
   )
 
-  // Post-im2col GEMM
-  {
-    float alpha = 1.0, beta = 0.0;
-    unsigned N = OH * OW;
-    unsigned K = C * KH * KW;
-    unsigned rsa = K;
-    unsigned csa = 1;
-    unsigned rsb = N;
-    unsigned csb = 1;
-    unsigned rsc = N;
-    unsigned csc = 1;
-    CONV_DEBUG(std::cout << M << " x " << K << " x " << N << " gemm\n";)
-    gemm(Kernel, BufIm2col, Output, M, K, N, K, N, N, 1.0, 0.0);
-    // TODO: For a fair comparison, calling custom gemm that is similar to
-    // other convolution implementations in this file. Replace with a call to
-    // OpenBLAS/BLIS/MKL/ESSL later.
-    // bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &alpha, Kernel,
-    //           rsa, csa, BufIm2col, rsb, csb, &beta, Output, rsc, csc);
-  }
+  gemm(Kernel, InputBuf, Output, M, K, N, K, N, N, 1.0, 0.0);
+  // TODO: For a fair comparison, calling custom gemm that is similar to
+  // other convolution implementations in this file. Replace with a call to
+  // OpenBLAS/BLIS/MKL/ESSL later.
+  // bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &alpha, Kernel,
+  //           rsa, csa, InputBuf, rsb, csb, &beta, Output, rsc, csc);
+
+  delete[] InputBuf;
 }
 //---------------------------------------------------------------------------
 
-// unsigned integer division rounding up
-#define DIV_UP(a, b) (a + b - 1) / b
+
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//+++ MEC for NCHW input +++
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+// Kernel: C x KH x KW
+// Output: KH x KW x C
+void mecNCHWTransformKernel(const float *Kernel, float *Output, unsigned M, unsigned C, unsigned KH, unsigned KW) {
+  unsigned To = 0;
+
+  for (unsigned m = 0; m < M; ++m) {
+    for (unsigned row = 0; row < KH; ++row) {
+      for (unsigned col = 0; col < KW; ++col) {
+        for (unsigned channel = 0; channel < C; ++channel) {
+          unsigned From = m * C * KH * KW + channel * KH * KW + row * KW + col;
+          Output[To++] = Kernel[From];
+        }
+      }
+    }
+  }
+}
+
+// Input: C x H x W
+// Output: C * H * KW x OW, NHWC-MEC
+void mecNCHWTransformInput(const float *Input, float *Output, unsigned C, unsigned H, unsigned W, unsigned KH, unsigned KW) {
+  unsigned OH = H - KH + 1;
+  unsigned OW = W - KW + 1;
+
+  unsigned To = 0;
+
+  for (unsigned row = 0; row < H; ++row) {
+    for (unsigned col = 0; col < KW; ++col) {
+      for (unsigned channel = 0; channel < C; ++channel) {
+        for (unsigned patchCol = 0; patchCol < OW; ++patchCol) {
+          unsigned From = channel * H * W + row * W + col + patchCol;
+          Output[To++] = Input[From];
+        }
+      }
+    }
+  }
+}
+
+auto *convMecNCHW(const float *Input, const float *Kernel, unsigned C, unsigned H,
+                  unsigned W, unsigned M, unsigned KH, unsigned KW) {
+
+  unsigned OH = H - KH + 1, OW = W - KW + 1;
+  auto *Output = allocateTensor(M * OH * OW);
+
+  auto *KernelBuf = allocateTensor(M * KH * KW * C);
+  mecNCHWTransformKernel(Kernel, KernelBuf, M, C, KH, KW);
+
+  auto *InputBuf = allocateTensor(C * H * KW * OW);
+  mecNCHWTransformInput(Input, InputBuf, C, H, W, KH, KW);
+
+  unsigned K = KH * KW * C;
+  unsigned N = OW;
+  unsigned rsa = K;
+  unsigned csa = 1;
+  unsigned rsb = N;
+  unsigned csb = 1;
+  unsigned rsc = N;
+  unsigned csc = 1;
+
+  CONV_DEBUG(
+    std::cout << "=== Mec-NCHW ===\n";
+    std::cout << "KernelBuf: " << M << " x " << KH * KW * C << "\n";
+    std::cout << "InputBuf: " << C * H * KW << " x " << OW << "\n";
+    std::cout << OH << " x GEMM[" << M << " x " << K << " x " << N << "]\n";
+    std::cout << std::string(80, '-') << "\n\n";
+  )
+
+  for (unsigned oh = 0; oh < OH; ++oh)
+    gemm(KernelBuf, InputBuf + oh * C * KW * OW, Output + oh * OW,
+        M, K, N, K, N, N, 1.0, 0.0);
+
+  delete[] KernelBuf, InputBuf;
+
+  return Output;
+}
+//---------------------------------------------------------------------------
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //+++ Fused im2col & packing +++
@@ -196,18 +270,19 @@ void sPack_im2Col(unsigned int i, unsigned int j,const float *In, float *B_pack,
   }
 }
 
-void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
-              unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW) {
+auto *convGemm(const float *Input, const float *Kernel, unsigned C, unsigned H,
+               unsigned W, unsigned M, unsigned KH, unsigned KW) {
 
   auto *APack = (float *)aligned_alloc(4096, BLOCK_MC * BLOCK_KC * sizeof(float));
   auto *BPack = (float *)aligned_alloc(4096, BLOCK_KC * BLOCK_NC * sizeof(float));
   auto *CBuff = (float *)aligned_alloc(4096, BLOCK_MR * BLOCK_NR * sizeof(float));
 
-  const unsigned OH = H - KH + 1, OW = W - KW + 1;
+   unsigned OH = H - KH + 1, OW = W - KW + 1;
+  auto *Output = allocateTensor(M * OH * OW);
 
-  const unsigned K = C * KH * KW;
-  const unsigned N = OH * OW;
-  const unsigned LDA = K, LDC = N;
+  unsigned K = C * KH * KW;
+  unsigned N = OH * OW;
+  unsigned LDA = K, LDC = N;
 
   float Alpha = 1.0, Zero = 0.0;
   for (unsigned jc = 0; jc < N; jc += BLOCK_NC) {
@@ -259,90 +334,7 @@ void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
       }
     }
   }
-}
-//---------------------------------------------------------------------------
 
-
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//+++ Yaconv +++
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// Input: C x H x W
-void yaconvPackB(float *Input, float *&Pack, unsigned Ks, unsigned Ns, unsigned KC, unsigned NC, unsigned C, unsigned H, unsigned W, unsigned KH, unsigned KW, unsigned OW) {
-  unsigned To = 0;
-  for (unsigned jc = Ns; jc < Ns + NC; jc += BLOCK_NR) {
-    for (unsigned k = Ks; k < Ks + KC; ++k) {
-      unsigned NR = MIN(NC - jc, BLOCK_NR);
-      for (unsigned jr = 0; jr < NR; ++jr) {
-        unsigned channel = k / (H * KW);
-        unsigned row = (k % (H * KW)) / KW;
-        unsigned col = (k % (H * KW)) % KW;
-        unsigned From = channel * H * W + row * W + col + jc + jr;
-        Pack[To++] = Input[From];
-      }
-      for (unsigned End = To + BLOCK_NR - NR; To != End; ++To)
-        Pack[To] = 0.0;
-    }
-  }
-}
-//---------------------------------------------------------------------------
-
-
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//+++ MEC +++
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// Input: H x W
-// Output: OW x H x KW
-void mec(const float *Input, unsigned C, unsigned H, unsigned W, unsigned KH,
-         unsigned KW, unsigned PadH, unsigned PadW, unsigned StrideH,
-         unsigned StrideW, unsigned DilH, unsigned DilW, float *Output) {
-
-  const unsigned OH = (H - KH + 2 * PadH) / StrideH + 1;
-  const unsigned OW = (W - KW + 2 * PadW) / StrideW + 1;
-
-  for (unsigned ow = 0; ow < OW; ++ow) {
-    for (unsigned c = 0; c < C; ++c) {
-      for (unsigned h = 0; h < H; ++h) {
-        unsigned OutputIdx = (c * H + h) * KW * OW + ow;
-        unsigned InputIdx = c * H * W + h * W + ow;
-        for (unsigned kw = 0; kw < KW; ++kw)
-          Output[OutputIdx + kw * OW] = Input[InputIdx + kw];
-      }
-    }
-  }
-}
-
-void convMEC(const float *Input, float *Kernel, float *Output, unsigned C,
-             unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW,
-             unsigned OH, unsigned OW, unsigned PadH, unsigned PadW,
-             unsigned StrideH, unsigned StrideW, unsigned DilH,
-             unsigned DilW) {
-
-  // MEC
-  float *BufMEC = allocateTensor(C * W * KH * OW);
-  mec(Input, C, H, W, KH, KW, 0, 0, 1, 1, 1, 1, BufMEC);
-  CONV_DEBUG(
-    std::cout << "=== BufMec ===\n";
-    printTensor(BufMEC, {C * H * KW, OW});
-    std::cout << std::string(80, '-') << "\n\n";
-  )
-
-  // Post-mec GEMM
-  {
-    float alpha = 1.0, beta = 0.0;
-    unsigned N = OH * OW;
-    unsigned K = C * KH * KW;
-    unsigned rsa = C * KH * KW;
-    unsigned csa = 1;
-    unsigned rsb = C * H * KW;
-    unsigned csb = 1;
-    unsigned rsc = OH * OW;
-    unsigned csc = 1;
-    CONV_DEBUG(std::cout << M << " x " << K << " x " << N << " gemm\n";)
-    for (unsigned h = 0; h < OH; ++h) {
-      bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_TRANSPOSE, M, N, K, &alpha, Kernel,
-                rsa, csa, BufMEC + h * KW, rsb, csb, &beta, Output + h * OW,
-                rsc, csc);
-    }
-  }
+  return Output;
 }
 //---------------------------------------------------------------------------

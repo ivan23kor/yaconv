@@ -1,10 +1,8 @@
 #include "utils.h"
-#include <cstdlib>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
 
-using namespace std;
 
 float *allocateTensor(unsigned Size) { return new float[Size]; }
 
@@ -31,7 +29,7 @@ float *allocateRandomTensor(unsigned Size, unsigned MaxVal) {
   return Tensor;
 }
 
-bool tensorsEqual(vector<float *>Tensors, const unsigned Size,
+bool tensorsEqual(std::vector<float *>Tensors, const unsigned Size,
                   const float Epsilon) {
   unsigned N = Tensors.size();
   if (N < 2)
@@ -42,14 +40,14 @@ bool tensorsEqual(vector<float *>Tensors, const unsigned Size,
   for (unsigned n = 1; n < N; ++n) {
     float *T = Tensors[n];
     for (unsigned i = 0; i < Size; ++i) {
-      float rel_diff = abs((TRef[i] - T[i]) / TRef[i]);
+      float rel_diff = std::abs((TRef[i] - T[i]) / TRef[i]);
       if (rel_diff > Epsilon) {
-        cerr << "[" << i << "] " << rel_diff << " |" << TRef[i] << " - " << T[i] << "|\n";
+        std::cerr << "[" << i << "] " << rel_diff << " |" << TRef[i] << " - " << T[i] << "|\n";
         ++Count;
       }
     }
     if (Count > 0) {
-      cout << Count << " values differ in Tensor[" << n << "].\n";
+      std::cout << Count << " values differ in Tensor[" << n << "].\n";
       break;
     }
   }
@@ -57,16 +55,16 @@ bool tensorsEqual(vector<float *>Tensors, const unsigned Size,
   return Count == 0;
 }
 
-void printVector(float *Vector, unsigned Len, const string Pre = "",
-                 const string Post = "\n", int Setw=3) {
-  cout << Pre << "[" << Vector[0];
+void printVector(float *Vector, unsigned Len, const std::string Pre = "",
+                 const std::string Post = "\n", int Setw=3) {
+  std::cout << Pre << "[" << Vector[0];
   for (unsigned i = 1; i < Len; ++i)
-    cout << setw(Setw + 1) << Vector[i];
-  cout << "]" << Post;
+    std::cout << std::setw(Setw + 1) << Vector[i];
+  std::cout << "]" << Post;
 }
 
-void printTensor(float *Tensor, vector<unsigned> Sizes, string Pre,
-                 const string Post, bool First, int Setw) {
+void printTensor(float *Tensor, std::vector<unsigned> Sizes,std::string Pre,
+                 const std::string Post, bool First, int Setw) {
 
   // This block only serves to determine setw width
   if (Setw == -1) {
@@ -76,23 +74,23 @@ void printTensor(float *Tensor, vector<unsigned> Sizes, string Pre,
 
     float MaxNum = 0.;
     for (unsigned i = 0; i < Size; ++i)
-      MaxNum = max(MaxNum, Tensor[i]);
+      MaxNum = std::max(MaxNum, Tensor[i]);
 
     Setw = 1;
     while ((MaxNum /= 10.) > 1.)
       ++Setw;
   }
 
-  const string FirstPre = First ? "" : Pre;
+  const std::string FirstPre = First ? "" : Pre;
   Pre += " ";
   if (Sizes.size() == 1) {
     printVector(Tensor, Sizes[0], FirstPre, Post, Setw);
     return;
   }
 
-  cout << FirstPre << "[";
+  std::cout << FirstPre << "[";
 
-  vector<unsigned> NewSizes(++Sizes.begin(), Sizes.end());
+  std::vector<unsigned> NewSizes(++Sizes.begin(), Sizes.end());
   if (Sizes[0] == 1) {
     printTensor(Tensor, NewSizes, Pre, "]" + Post, true, Setw);
     return;
@@ -100,8 +98,8 @@ void printTensor(float *Tensor, vector<unsigned> Sizes, string Pre,
 
   printTensor(Tensor, NewSizes, Pre, "\n", true, Setw);
 
-  const string Newlines = string(NewSizes.size() - 1, '\n');
-  cout << Newlines;
+  const std::string Newlines =std::string(NewSizes.size() - 1, '\n');
+  std::cout << Newlines;
 
   unsigned Stride = 1;
   for (const auto &s : NewSizes)
@@ -110,7 +108,7 @@ void printTensor(float *Tensor, vector<unsigned> Sizes, string Pre,
   float *End = Tensor + (Sizes[0] - 1) * Stride;
   for (Tensor = Tensor + Stride; Tensor != End; Tensor += Stride) {
     printTensor(Tensor, NewSizes, Pre, "\n", false, Setw);
-    cout << Newlines;
+    std::cout << Newlines;
   }
   printTensor(Tensor, NewSizes, Pre, "]" + Post, false, Setw);
 }

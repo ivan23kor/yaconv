@@ -13,7 +13,7 @@ namespace {
 }; // abstract namespace
 
 // Block is row-major
-void packA(float *Block, float *&Pack, unsigned LDA, unsigned MC, unsigned KC) {
+void packA(const float *Block, float *&Pack, unsigned LDA, unsigned MC, unsigned KC) {
   unsigned To = 0;
   for (unsigned ic = 0; ic < MC; ic += BLOCK_MR) {
     unsigned MR = MIN(MC - ic, BLOCK_MR);
@@ -29,7 +29,7 @@ void packA(float *Block, float *&Pack, unsigned LDA, unsigned MC, unsigned KC) {
 }
 
 // Block is row-major
-void packB(float *Block, float *&Pack, unsigned LDB, unsigned KC, unsigned NC) {
+void packB(const float *Block, float *&Pack, unsigned LDB, unsigned KC, unsigned NC) {
   unsigned To = 0;
   for (unsigned jc = 0; jc < NC; jc += BLOCK_NR) {
     unsigned NR = MIN(NC - jc, BLOCK_NR);
@@ -44,7 +44,7 @@ void packB(float *Block, float *&Pack, unsigned LDB, unsigned KC, unsigned NC) {
   }
 }
 
-void gemm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
+void gemm(const float *A, const float *B, float *C, unsigned M, unsigned K, unsigned N,
           unsigned LDA, unsigned LDB, unsigned LDC, float Alpha, float Beta) {
 
   auto *APack = (float *)aligned_alloc(4096, BLOCK_MC * BLOCK_KC * sizeof(float));
