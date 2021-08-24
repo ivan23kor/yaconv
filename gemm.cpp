@@ -1,6 +1,7 @@
 #include <blis.h>
 #include <iostream>
 #include <stdlib.h>
+#include "utils.h"
 
 #define MIN(a, b) a < b ? a : b
 
@@ -50,7 +51,11 @@ void gemm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
   auto *BPack = (float *)aligned_alloc(4096, BLOCK_KC * BLOCK_NC * sizeof(float));
   auto *CBuff = (float *)aligned_alloc(4096, BLOCK_MR * BLOCK_NR * sizeof(float));
 
-  float Zero = 0.0;
+  // C *= Beta
+  bli_sscalm(BLIS_NO_CONJUGATE, 0, BLIS_NONUNIT_DIAG, BLIS_DENSE, M, N, &Beta,
+      C, LDC, 1);
+
+  float Zero = 0.0, One = 1.0;
   for (unsigned jc = 0; jc < N; jc += BLOCK_NC) {
 
     unsigned NC = MIN(N - jc, BLOCK_NC);
@@ -58,8 +63,6 @@ void gemm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
     for (unsigned k = 0; k < K; k += BLOCK_KC) {
 
       unsigned KC = MIN(K - k, BLOCK_KC);
-
-      float Beta_ = k == 0 ? Beta : 1.0; // Accumulate or not
 
       packB(B + k * LDB + jc, BPack, LDB, KC, NC);
 
@@ -82,11 +85,11 @@ void gemm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
             float *Cr = C + (ic + ir) * LDC + jc + jr;
 
             if ((MR == BLOCK_MR) && (NR == BLOCK_NR))
-              blisGemmUKR(KC, &Alpha, Ar, Br, &Beta_, Cr, LDC, 1, data, cntx);
+              blisGemmUKR(KC, &Alpha, Ar, Br, &One, Cr, LDC, 1, data, cntx);
             else {
               blisGemmUKR(KC, &Alpha, Ar, Br, &Zero, CBuff, BLOCK_NR, 1,
                   data, cntx);
-              bli_sscal2m(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE,
+              bli_saxpym(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE,
                   MR, NR, &Alpha, CBuff, BLOCK_NR, 1, Cr, LDC, 1);
             }
           }
