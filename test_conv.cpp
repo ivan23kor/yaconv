@@ -6,17 +6,15 @@
 #include <iostream>
 
 
-using namespace std;
 using namespace std::chrono;
 
 
 #define MAIN_DEBUG(expr) if (DEBUG == 1) {expr;}
 
 
-// Assumes strides = 1, pads = 0, dilations = 1
 int main(int argc, char **argv) {
   if (argc != 8) {
-    cerr << "Usage: ./yaconv N C H W M KH KW\n";
+    std::cerr << "Usage: ./test_conv N C H W M KH KW\n";
     return -1;
   }
 
@@ -32,41 +30,50 @@ int main(int argc, char **argv) {
 
   // Init Kernel
   float *Kernel = allocateFilledTensor(M * C * KH * KW);
-  MAIN_DEBUG(printTensor(Kernel, {M, C * KH * KW}))
+  MAIN_DEBUG(
+    printTensor(Kernel, {M, C * KH * KW})
+  )
 
   // Init Input
   float *Input = allocateFilledTensor(C * H * W);
-  MAIN_DEBUG(printTensor(Input, {C, H, W}))
+  MAIN_DEBUG(
+    printTensor(Input, {C, H, W})
+  )
 
   // Time variables
   high_resolution_clock::time_point t1, t2;
-  vector<double> Times;
+  double TempTime;
+  std::vector<double> Times;
+
+  // Output tensors
+  std::vector<float *> Outputs;
+
+#define RUN(f) \
+  Outputs.push_back(allocateTensor(M * OH * OW)); \
+  TempTime = 0.0; \
+  for (unsigned i = 0; i < 10; ++i) { \
+    t1 = high_resolution_clock::now(); \
+    f; \
+    t2 = high_resolution_clock::now(); \
+    TempTime += duration_cast<duration<double>>(t2 - t1).count(); \
+  } \
+  Times.push_back(TempTime);
 
   // Convolution with im2col
-  float *OutputIm2col = allocateTensor(M * OH * OW);
-  t1 = high_resolution_clock::now();
-  convIm2col(Input, Kernel, OutputIm2col, C, H, W, M, KH, KW, OH, OW, 0,
-              0, 1, 1, 1, 1);
-  t2 = high_resolution_clock::now();
-  Times.push_back(duration_cast<duration<double>>(t2 - t1).count());
+  RUN(convIm2col(Input, Kernel, Outputs.back(), C, H, W, M, KH, KW, OH, OW, 0, 0, 1, 1, 1, 1))
 
   // Convolution with fused im2col+packing
-  float *OutputConvGemm = allocateTensor(M * OH * OW);
-  t2 = high_resolution_clock::now();
-  convGemm(Input, Kernel, OutputConvGemm, C, H, W, M, KH, KW);
-  t2 = high_resolution_clock::now();
-  Times.push_back(duration_cast<duration<double>>(t2 - t1).count());
+  RUN(convGemm(Input, Kernel, Outputs.back(), C, H, W, M, KH, KW))
 
   // Print times for each run
-  for (const auto &t: Times)
-    cout << t << "\n";
+  for (const auto &Time: Times)
+    std::cout << Time << "\n";
 
+  // Print tensors for each run
   MAIN_DEBUG(
-    cout << "OutputIm2col:\n";
-    printTensor(OutputIm2col, {M, OH * OW});
-    cout << "OutputConvGemm:\n";
-    printTensor(OutputConvGemm, {M, OH * OW});
+    for (const auto &Output: Outputs)
+      printTensor(Output, {M, OH * OW});
   )
 
-  return tensorsEqual(OutputIm2col, OutputConvGemm, M * OH * OW) ? 0 : -1;
+  return tensorsEqual(Outputs, M * OH * OW) ? 0 : -1;
 }

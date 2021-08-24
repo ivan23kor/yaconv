@@ -184,16 +184,21 @@ void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
             else {
               blisGemmUKR(KC, &Alpha, Ar, Br, &Zero, CBuff, BLOCK_NR, 1,
                   data, cntx);
-              bli_saxpym(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE,
+              bli_sscal2m(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE,
                   MR, NR, &Alpha, CBuff, BLOCK_NR, 1, Cr, LDC, 1);
+              // TODO: scal2m can be replaced with copym for convolution.
+              // Should be faster, keeping it like that to be fair with the
+              // performance of gemm based on scal2m.
+              // bli_scopym(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE,
+              //     MR, NR, CBuff, BLOCK_NR, 1, Cr, LDC, 1);
             }
           }
         }
       }
     }
   }
-  std::cout << "PackATime: " << PackATime << "\n";
-  std::cout << "PackBTime: " << PackBTime << "\n";
+  // std::cout << "PackATime: " << PackATime << "\n";
+  // std::cout << "PackBTime: " << PackBTime << "\n";
 }
 //---------------------------------------------------------------------------
 

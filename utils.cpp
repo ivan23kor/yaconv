@@ -31,18 +31,29 @@ float *allocateRandomTensor(unsigned Size, unsigned MaxVal) {
   return Tensor;
 }
 
-bool tensorsEqual(float *T1, float *T2, const unsigned Size,
+bool tensorsEqual(vector<float *>Tensors, const unsigned Size,
                   const float Epsilon) {
+  unsigned N = Tensors.size();
+  if (N < 2)
+    return true;
+
+  float *TRef = Tensors[0];
   unsigned Count = 0;
-  for (unsigned i = 0; i < Size; ++i) {
-    float rel_diff = abs((T1[i] - T2[i]) / T1[i]);
-    if (rel_diff > Epsilon) {
-      cerr << "[" << i << "] " << rel_diff << " |" << T1[i] << " - " << T2[i] << "|\n";
-      ++Count;
+  for (unsigned n = 1; n < N; ++n) {
+    float *T = Tensors[n];
+    for (unsigned i = 0; i < Size; ++i) {
+      float rel_diff = abs((TRef[i] - T[i]) / TRef[i]);
+      if (rel_diff > Epsilon) {
+        cerr << "[" << i << "] " << rel_diff << " |" << TRef[i] << " - " << T[i] << "|\n";
+        ++Count;
+      }
+    }
+    if (Count > 0) {
+      cout << Count << " values differ in Tensor[" << n << "].\n";
+      break;
     }
   }
-  if (Count > 0)
-    cout << Count << " values differ.\n";
+
   return Count == 0;
 }
 

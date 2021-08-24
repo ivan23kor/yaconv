@@ -98,7 +98,7 @@ void gemm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
             else {
               blisGemmUKR(KC, &Alpha, Ar, Br, &Zero, CBuff, BLOCK_NR, 1,
                   data, cntx);
-              bli_saxpym(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE,
+              bli_sscal2m(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE,
                   MR, NR, &Alpha, CBuff, BLOCK_NR, 1, Cr, LDC, 1);
             }
           }
@@ -106,6 +106,6 @@ void gemm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
       }
     }
   }
-  std::cout << "PackATime: " << PackATime << "\n";
-  std::cout << "PackBTime: " << PackBTime << "\n";
+  // std::cout << "PackATime: " << PackATime << "\n";
+  // std::cout << "PackBTime: " << PackBTime << "\n";
 }

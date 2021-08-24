@@ -14,7 +14,7 @@ float *allocateFilledTensor(unsigned Size, float Value=-1.);
 
 float *allocateRandomTensor(unsigned Size, unsigned MaxVal=256);
 
-bool tensorsEqual(float *T1, float *T2, const unsigned Size,
+bool tensorsEqual(std::vector<float *>, const unsigned Size,
                   const float Epsilon = 1e-6);
 
 void printTensor(float *Tensor, std::vector<unsigned> Sizes,
