@@ -1,12 +1,8 @@
 #include <blis.h>
-#include <chrono>
 #include <iostream>
 #include <stdlib.h>
 
 #define MIN(a, b) a < b ? a : b
-
-
-using namespace std::chrono;
 
 
 namespace {
@@ -55,8 +51,6 @@ void gemm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
   auto *CBuff = (float *)aligned_alloc(4096, BLOCK_MR * BLOCK_NR * sizeof(float));
 
   float Zero = 0.0;
-  high_resolution_clock::time_point t1, t2;
-  double PackATime = 0.0, PackBTime = 0.0;
   for (unsigned jc = 0; jc < N; jc += BLOCK_NC) {
 
     unsigned NC = MIN(N - jc, BLOCK_NC);
@@ -67,19 +61,13 @@ void gemm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
 
       float Beta_ = k == 0 ? Beta : 1.0; // Accumulate or not
 
-      t1 = high_resolution_clock::now();
       packB(B + k * LDB + jc, BPack, LDB, KC, NC);
-      t2 = high_resolution_clock::now();
-      PackBTime += duration_cast<duration<double>>(t2 - t1).count();
 
       for (unsigned ic = 0; ic < M; ic += BLOCK_MC) {
 
         unsigned MC = MIN(M - ic, BLOCK_MC);
 
-        t1 = high_resolution_clock::now();
         packA(A + ic * LDA + k, APack, LDA, MC, KC);
-        t2 = high_resolution_clock::now();
-        PackATime += duration_cast<duration<double>>(t2 - t1).count();
 
         for (unsigned jr = 0; jr < NC; jr += BLOCK_NR) {
 
@@ -106,6 +94,4 @@ void gemm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
       }
     }
   }
-  // std::cout << "PackATime: " << PackATime << "\n";
-  // std::cout << "PackBTime: " << PackBTime << "\n";
 }

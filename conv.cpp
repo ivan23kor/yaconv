@@ -2,15 +2,8 @@
 #include "gemm.h"
 #include "utils.h"
 #include <blis.h>
-#include <chrono>
 #include <iostream>
 #include <stdlib.h>
-
-
-using namespace std;
-using namespace std::chrono;
-
-
 
 #define CONV_DEBUG(expr) if (DEBUG == 1) {expr;}
 #define MIN(a, b) a < b ? a : b
@@ -25,7 +18,7 @@ namespace {
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //+++ Im2col +++
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// The following two function are taken from https://github.com/BVLC/caffe/blob/master/src/caffe/util/im2col.cpp
+// The following two functions are taken from https://github.com/BVLC/caffe/blob/master/src/caffe/util/im2col.cpp
 inline bool is_a_ge_zero_and_a_lt_b(int a, int b) {
   return static_cast<unsigned>(a) < static_cast<unsigned>(b);
 }
@@ -78,10 +71,10 @@ void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
   // im2col
   float *BufIm2col = allocateTensor(C * KH * KW * OH * OW);
   im2col(Input, C, H, W, KH, KW, 0, 0, 1, 1, 1, 1, BufIm2col);
-  cout << "=== BufIm2col (" << C * KH * KW * OH * OW << " elements) ===\n";
   CONV_DEBUG(
+    std::cout << "=== BufIm2col (" << C * KH * KW * OH * OW << " elements) ===\n";
     printTensor(BufIm2col, {C * KH * KW, OH * OW});
-    cout << string(80, '-') << "\n\n";
+    std::cout << std::string(80, '-') << "\n\n";
   )
 
   // Post-im2col GEMM
@@ -95,35 +88,111 @@ void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
     unsigned csb = 1;
     unsigned rsc = N;
     unsigned csc = 1;
-    CONV_DEBUG(cout << M << " x " << K << " x " << N << " gemm\n";)
+    CONV_DEBUG(std::cout << M << " x " << K << " x " << N << " gemm\n";)
     gemm(Kernel, BufIm2col, Output, M, K, N, K, N, N, 1.0, 0.0);
+    // TODO: For a fair comparison, calling custom gemm that is similar to
+    // other convolution implementations in this file. Replace with a call to
+    // OpenBLAS/BLIS/MKL/ESSL later.
     // bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &alpha, Kernel,
     //           rsa, csa, BufIm2col, rsb, csb, &beta, Output, rsc, csc);
   }
 }
 //---------------------------------------------------------------------------
 
+// unsigned integer division rounding up
+#define DIV_UP(a, b) (a + b - 1) / b
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //+++ Fused im2col & packing +++
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// Input: C x H x W
-inline void im2colPackB(float *Input, float *&Pack, unsigned Ks, unsigned Ns, unsigned KC, unsigned NC, unsigned C, unsigned H, unsigned W, unsigned KH, unsigned KW, unsigned OW) {
-  unsigned To = 0;
-  for (unsigned jc = 0; jc < NC; jc += BLOCK_NR) {
-    for (unsigned k = 0; k < KC; ++k) {
-      unsigned NR = MIN(NC - jc, BLOCK_NR);
-      for (unsigned jr = 0; jr < NR; ++jr) {
-        unsigned patch = Ns + jc + jr;
-        unsigned channel = (Ks + k) / (KH * KW);
-        unsigned patch_row = ((Ks + k) % (KH * KW)) / KW;
-        unsigned patch_col = ((Ks + k) % (KH * KW)) % KW;
-        unsigned From = channel * H * W + (patch / OW) * W + patch % OW + patch_row * W + patch_col;
-        Pack[To++] = Input[From];
+// The following function is taken from https://gitlab.com/comtacts/convgemm/-/blob/public/convGemm.c#L1248-1336
+void sPack_im2Col(unsigned int i, unsigned int j,const float *In, float *B_pack, unsigned int k, unsigned int n, unsigned int c,
+                  unsigned int h, unsigned int w,
+                  unsigned int ho, unsigned int wo,
+                  unsigned int kh, unsigned int kw,
+                  unsigned int hStride, unsigned int wStride)
+{
+    unsigned int ic,ikw,ikh, //Row related indexes (regarding the phantom matrix)
+                 j_local, ib,iw,ih, //Col related indexes (regarding the phantom matrix)
+                 pos, pos_ic, pos_ib, pos_ic_ikw; //position on the original image
+    unsigned int pos_ic_ini,ikw_ini,ikh_ini,pos_ib_ini,iw_ini,ih_ini; //Initial values of indexes
+
+    unsigned int cSize = h*w, //chanel memory leap in input tensor
+                 coSize = ho*wo, //chanel memory leap in matrix B
+                 kSize = kh*kw, //kernel memory leap (single chanel)
+                 bSize = c*h*w; //batch memory leap
+
+    unsigned int jc,pc,jr; //loop control indexes
+  float * restrict B_pack_local;
+    unsigned int skipPos;
+
+    ic = i/kSize;
+    ikw_ini = (i%kSize)/kh;
+    ikh_ini = (i%kSize)%kh;
+    pos_ic_ini = ic * cSize;
+
+
+
+    //#pragma omp parallel for private(B_pack_local,skipPos, j_local,pc,jr,ib,ih_ini, iw_ini, pos_ib_ini,pos_ic,ikw,pos_ic_ikw,ikh,pos_ib,iw,ih,pos) firstprivate(j)
+  for(jc=0;jc<n;jc+=BLOCK_NR){
+
+    B_pack_local=&B_pack[jc*k];
+    unsigned int n_alg=fmin(BLOCK_NR,n-jc);
+        skipPos =BLOCK_NR - n_alg;
+
+        j_local = j +jc;
+        ib = j_local/coSize;
+        iw_ini = (j_local%(coSize))/ho;
+        ih_ini = (j_local%(coSize))%ho;
+        pos_ib_ini = ib * bSize;
+
+
+
+        //ih_ini = ih_ini + jc
+
+        pos_ic=pos_ic_ini;
+        ikw=ikw_ini;
+        pos_ic_ikw = ikw * h + pos_ic;
+    for(pc=0,ikh=ikh_ini;pc<k;pc++,ikh++){
+            if(ikh==kh)
+            {
+                ikh=0;
+                ikw++;
+                pos_ic_ikw += h; //OPT pos_ic_ikw = ikw* h +pos_ic
+                if(ikw==kw)
+                {
+                    ikw=0;
+                    pos_ic += cSize;//OPT ic++;pos_ic = ic * cSize;
+                    pos_ic_ikw = pos_ic;//OPT pos_ic_ikw = ikw *h + pos_ic;
+                }
+            }
+
+            pos_ib=pos_ib_ini;
+            iw=iw_ini;
+      for(jr=0,ih=ih_ini;jr<n_alg;jr++,ih++){
+                if(ih==ho)
+                {
+                    ih=0;
+                    iw++;
+                    if(iw==wo)
+                    {
+                        iw=0;
+                        pos_ib += bSize;//OPT ib++;pos_in = ib*bSize;
+                    }
+                }
+                // OPT pos = ib * bSize  + ic * cSize + (iw * wStride + ikw) *h + (ih * hStride + ikh);
+                // OPT pos = pos_ib + pos_ic + (iw * wStride * h + pos_ikw) + (ih * hStride + ikh);
+                pos = pos_ib + pos_ic_ikw + iw * wStride * h + (ih * hStride + ikh);
+
+
+                B_pack_local[0]=In[pos];
+        B_pack_local++;
       }
-      for (unsigned End = To + BLOCK_NR - NR; To != End; ++To)
-        Pack[To] = 0.0;
+      B_pack_local+=skipPos;
     }
+        //ih_ini = ih;
+        //iw_ini = iw;
+        //pos_ib_ini = pos_ib;
   }
 }
 
@@ -141,8 +210,6 @@ void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
   const unsigned LDA = K, LDC = N;
 
   float Alpha = 1.0, Zero = 0.0;
-  high_resolution_clock::time_point t1, t2;
-  double PackATime = 0.0, PackBTime = 0.0;
   for (unsigned jc = 0; jc < N; jc += BLOCK_NC) {
 
     unsigned NC = MIN(N - jc, BLOCK_NC);
@@ -153,19 +220,14 @@ void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
 
       float Beta = k == 0 ? 0.0 : 1.0; // Accumulate or not
 
-      t1 = high_resolution_clock::now();
-      im2colPackB(Input, BPack, k, jc, KC, NC, C, H, W, KH, KW, OW);
-      t2 = high_resolution_clock::now();
-      PackBTime += duration_cast<duration<double>>(t2 - t1).count();
+      // TODO: strides
+      sPack_im2Col(k, jc, Input, BPack, KC, NC, C, H, W, OH, OW, KH, KW, 1, 1);
 
       for (unsigned ic = 0; ic < M; ic += BLOCK_MC) {
 
         unsigned MC = MIN(M - ic, BLOCK_MC);
 
-        t1 = high_resolution_clock::now();
         packA(Kernel + ic * LDA + k, APack, LDA, MC, KC);
-        t2 = high_resolution_clock::now();
-        PackATime += duration_cast<duration<double>>(t2 - t1).count();
 
         for (unsigned jr = 0; jr < NC; jr += BLOCK_NR) {
 
@@ -197,8 +259,6 @@ void convGemm(float *Input, float *Kernel, float *Output, unsigned C,
       }
     }
   }
-  // std::cout << "PackATime: " << PackATime << "\n";
-  // std::cout << "PackBTime: " << PackBTime << "\n";
 }
 //---------------------------------------------------------------------------
 
@@ -261,9 +321,9 @@ void convMEC(const float *Input, float *Kernel, float *Output, unsigned C,
   float *BufMEC = allocateTensor(C * W * KH * OW);
   mec(Input, C, H, W, KH, KW, 0, 0, 1, 1, 1, 1, BufMEC);
   CONV_DEBUG(
-    cout << "=== BufMec ===\n";
+    std::cout << "=== BufMec ===\n";
     printTensor(BufMEC, {C * H * KW, OW});
-    cout << string(80, '-') << "\n\n";
+    std::cout << std::string(80, '-') << "\n\n";
   )
 
   // Post-mec GEMM
@@ -277,7 +337,7 @@ void convMEC(const float *Input, float *Kernel, float *Output, unsigned C,
     unsigned csb = 1;
     unsigned rsc = OH * OW;
     unsigned csc = 1;
-    CONV_DEBUG(cout << M << " x " << K << " x " << N << " gemm\n";)
+    CONV_DEBUG(std::cout << M << " x " << K << " x " << N << " gemm\n";)
     for (unsigned h = 0; h < OH; ++h) {
       bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_TRANSPOSE, M, N, K, &alpha, Kernel,
                 rsa, csa, BufMEC + h * KW, rsb, csb, &beta, Output + h * OW,

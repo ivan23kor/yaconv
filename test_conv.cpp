@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
 #define RUN(f) \
   Outputs.push_back(allocateTensor(M * OH * OW)); \
   TempTime = 0.0; \
-  for (unsigned i = 0; i < 10; ++i) { \
+  for (unsigned i = 0; i < 1; ++i) { \
     t1 = high_resolution_clock::now(); \
     f; \
     t2 = high_resolution_clock::now(); \
