@@ -1,19 +1,19 @@
+#include "utils.h"
 #include <blis.h>
 #include <iostream>
 #include <stdlib.h>
-#include "utils.h"
 
 #define MIN(a, b) a < b ? a : b
-
 
 namespace {
 
 #include "set_blis_params.h"
 
-}; // abstract namespace
+}; // namespace
 
 // Block is row-major
-void packA(const float *Block, float *&Pack, unsigned LDA, unsigned MC, unsigned KC) {
+void packA(const float *Block, float *&Pack, unsigned LDA, unsigned MC,
+           unsigned KC) {
   unsigned To = 0;
   for (unsigned ic = 0; ic < MC; ic += BLOCK_MR) {
     unsigned MR = MIN(MC - ic, BLOCK_MR);
@@ -29,7 +29,8 @@ void packA(const float *Block, float *&Pack, unsigned LDA, unsigned MC, unsigned
 }
 
 // Block is row-major
-void packB(const float *Block, float *&Pack, unsigned LDB, unsigned KC, unsigned NC) {
+void packB(const float *Block, float *&Pack, unsigned LDB, unsigned KC,
+           unsigned NC) {
   unsigned To = 0;
   for (unsigned jc = 0; jc < NC; jc += BLOCK_NR) {
     unsigned NR = MIN(NC - jc, BLOCK_NR);
@@ -44,16 +45,20 @@ void packB(const float *Block, float *&Pack, unsigned LDB, unsigned KC, unsigned
   }
 }
 
-void gemm(const float *A, const float *B, float *C, unsigned M, unsigned K, unsigned N,
-          unsigned LDA, unsigned LDB, unsigned LDC, float Alpha, float Beta) {
+void gemm(const float *A, const float *B, float *C, unsigned M, unsigned K,
+          unsigned N, unsigned LDA, unsigned LDB, unsigned LDC, float Alpha,
+          float Beta) {
 
-  auto *APack = (float *)aligned_alloc(4096, BLOCK_MC * BLOCK_KC * sizeof(float));
-  auto *BPack = (float *)aligned_alloc(4096, BLOCK_KC * BLOCK_NC * sizeof(float));
-  auto *CBuff = (float *)aligned_alloc(4096, BLOCK_MR * BLOCK_NR * sizeof(float));
+  auto *APack =
+      (float *)aligned_alloc(4096, BLOCK_MC * BLOCK_KC * sizeof(float));
+  auto *BPack =
+      (float *)aligned_alloc(4096, BLOCK_KC * BLOCK_NC * sizeof(float));
+  auto *CBuff =
+      (float *)aligned_alloc(4096, BLOCK_MR * BLOCK_NR * sizeof(float));
 
   // C *= Beta
   bli_sscalm(BLIS_NO_CONJUGATE, 0, BLIS_NONUNIT_DIAG, BLIS_DENSE, M, N, &Beta,
-      C, LDC, 1);
+             C, LDC, 1);
 
   float Zero = 0.0, One = 1.0;
   for (unsigned jc = 0; jc < N; jc += BLOCK_NC) {
@@ -87,10 +92,10 @@ void gemm(const float *A, const float *B, float *C, unsigned M, unsigned K, unsi
             if ((MR == BLOCK_MR) && (NR == BLOCK_NR))
               blisGemmUKR(KC, &Alpha, Ar, Br, &One, Cr, LDC, 1, data, cntx);
             else {
-              blisGemmUKR(KC, &Alpha, Ar, Br, &Zero, CBuff, BLOCK_NR, 1,
-                  data, cntx);
+              blisGemmUKR(KC, &Alpha, Ar, Br, &Zero, CBuff, BLOCK_NR, 1, data,
+                          cntx);
               bli_saxpym(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE,
-                  MR, NR, &Alpha, CBuff, BLOCK_NR, 1, Cr, LDC, 1);
+                         MR, NR, &Alpha, CBuff, BLOCK_NR, 1, Cr, LDC, 1);
             }
           }
         }

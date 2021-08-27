@@ -3,7 +3,6 @@
 #include <iomanip>
 #include <iostream>
 
-
 float *allocateTensor(unsigned Size) { return new float[Size]; }
 
 void randomizeTensor(float *&Tensor, unsigned Size, unsigned MaxVal) {
@@ -29,7 +28,7 @@ float *allocateRandomTensor(unsigned Size, unsigned MaxVal) {
   return Tensor;
 }
 
-bool tensorsEqual(std::vector<float *>Tensors, const unsigned Size,
+bool tensorsEqual(std::vector<float *> Tensors, const unsigned Size,
                   const float Epsilon) {
   unsigned N = Tensors.size();
   if (N < 2)
@@ -42,7 +41,8 @@ bool tensorsEqual(std::vector<float *>Tensors, const unsigned Size,
     for (unsigned i = 0; i < Size; ++i) {
       float rel_diff = std::abs((TRef[i] - T[i]) / TRef[i]);
       if (rel_diff > Epsilon) {
-        std::cerr << "[" << i << "] " << rel_diff << " |" << TRef[i] << " - " << T[i] << "|\n";
+        std::cerr << "[" << i << "] " << rel_diff << " |" << TRef[i] << " - "
+                  << T[i] << "|\n";
         ++Count;
       }
     }
@@ -56,14 +56,14 @@ bool tensorsEqual(std::vector<float *>Tensors, const unsigned Size,
 }
 
 void printVector(float *Vector, unsigned Len, const std::string Pre = "",
-                 const std::string Post = "\n", int Setw=3) {
+                 const std::string Post = "\n", int Setw = 3) {
   std::cout << Pre << "[" << Vector[0];
   for (unsigned i = 1; i < Len; ++i)
     std::cout << std::setw(Setw + 1) << Vector[i];
   std::cout << "]" << Post;
 }
 
-void printTensor(float *Tensor, std::vector<unsigned> Sizes,std::string Pre,
+void printTensor(float *Tensor, std::vector<unsigned> Sizes, std::string Pre,
                  const std::string Post, bool First, int Setw) {
 
   // This block only serves to determine setw width
@@ -98,7 +98,7 @@ void printTensor(float *Tensor, std::vector<unsigned> Sizes,std::string Pre,
 
   printTensor(Tensor, NewSizes, Pre, "\n", true, Setw);
 
-  const std::string Newlines =std::string(NewSizes.size() - 1, '\n');
+  const std::string Newlines = std::string(NewSizes.size() - 1, '\n');
   std::cout << Newlines;
 
   unsigned Stride = 1;

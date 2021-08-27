@@ -1,4 +1,5 @@
 #pragma once
+#include <vector>
 
 void im2col(const float *data_im, const int channels, const int height,
             const int width, const int kernel_h, const int kernel_w,
@@ -12,14 +13,19 @@ void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
                 unsigned StrideH, unsigned StrideW, unsigned DilH,
                 unsigned DilW);
 
-void im2colPackB(float *Input, float *&Pack, unsigned Ks, unsigned Ns, unsigned KC, unsigned NC, unsigned C, unsigned H, unsigned W, unsigned KH, unsigned KW, unsigned OW);
+void im2colPackB(float *Input, float *&Pack, unsigned Ks, unsigned Ns,
+                 unsigned KC, unsigned NC, unsigned C, unsigned H, unsigned W,
+                 unsigned KH, unsigned KW, unsigned OW);
 
 float *convGemm(const float *Input, const float *Kernel, unsigned C, unsigned H,
                 unsigned W, unsigned M, unsigned KH, unsigned KW);
 
-void mecNCHWTransformKernel(const float *Kernel, float *Output, unsigned M, unsigned C, unsigned KH, unsigned KW);
+void mecNCHWTransformKernel(const float *Kernel, float *Output, unsigned M,
+                            unsigned C, unsigned KH, unsigned KW);
 
-void mecNCHWTransformInput(const float *Input, float *Output, unsigned C, unsigned H, unsigned W, unsigned KH, unsigned KW);
+void mecNCHWTransformInput(const float *Input, float *Output, unsigned C,
+                           unsigned H, unsigned W, unsigned KH, unsigned KW);
 
-float *convMecNCHW(const float *Input, const float *Kernel, unsigned C, unsigned H,
-                   unsigned W, unsigned M, unsigned KH, unsigned KW);
+float *convMecNCHW(const float *Input, const float *Kernel, unsigned C,
+                   unsigned H, unsigned W, unsigned M, unsigned KH,
+                   unsigned KW);
