@@ -21,12 +21,16 @@ high_resolution_clock::time_point t1, t2;
 #define MIN(a, b) a < b ? a : b
 
 // A dirty macro to time parts of the algorithms
+#ifndef TIME
 #define TIME(cmd)                                                              \
   t1 = high_resolution_clock::now();                                           \
   cmd;                                                                         \
   t2 = high_resolution_clock::now();                                           \
   Times.push_back(duration_cast<duration<double>>(t2 - t1).count());
+#else
+#undef TIME
 #define TIME(cmd) cmd;
+#endif
 
 extern std::vector<double> Times;
 
@@ -200,17 +204,15 @@ void packKernel(const float *Kernel, float *Pack, unsigned M, unsigned C, unsign
   for (unsigned ic = 0; ic < M; ic += BLOCK_MR) {
     unsigned MR = MIN(M - ic, BLOCK_MR);
     for (unsigned k = 0; k < KH * KW * C; ++k) {
-      for (unsigned ir = 0; ir < MR; ++ir) {
+      for (unsigned ir = 0; ir < BLOCK_MR; ++ir) {
         unsigned m = ic + ir;
         unsigned c = k % C;
         unsigned h = k / C / KW;
         unsigned w = k / C % KW;
         unsigned From = m * C * KH * KW + c * KH * KW + h * KW + w;
         // std::cout << From << " -> " << To++ << "\n";
-        Pack[To++] = Kernel[From];
+        Pack[To++] = ir < MR ? Kernel[From] : 0.0;
       }
-      for (unsigned End = To + BLOCK_MR - MR; To != End; ++To)
-        Pack[To] = 0.0;
     }
   }
 }
@@ -220,16 +222,14 @@ void packInput(const float *Input, float *Pack, unsigned C, unsigned H, unsigned
   for (unsigned jc = 0; jc < OW; jc += BLOCK_NR) {
     unsigned NR = MIN(OW - jc, BLOCK_NR);
     for (unsigned k = 0; k < H * KW * C; ++k) {
-      for (unsigned jr = 0; jr < NR; ++jr) {
+      for (unsigned jr = 0; jr < BLOCK_NR; ++jr) {
         unsigned c = k % C;
         unsigned h = k / C / KW;
         unsigned w = k / C % KW;
         unsigned From = c * H * W + h * W + w + jc + jr;
         // std::cout << From << " -> " << To++ << "\n";
-        Pack[To++] = Input[From];
+        Pack[To++] = jr < NR ? Input[From] : 0.0;
       }
-      for (unsigned End = To + BLOCK_NR - NR; To != End; ++To)
-        Pack[To] = 0.0;
     }
   }
 }
@@ -254,12 +254,14 @@ float *yaconv(const float *Input, float *Kernel, unsigned C,
   TIME(packKernel(Kernel, KernelPack, M, C, KH, KW);)
   TIME(packInput(Input, InputPack, C, H, W, KH, KW, OW);)
 
+  CONV_DEBUG(
   std::cout << "Packed Kernel:\n";
   printTensor(KernelPack, {KH * KW * C * BLOCK_M / BLOCK_MR, BLOCK_MR});
   std::cout << "Packed Input:\n";
   printTensor(InputPack, {H * KW * C * BLOCK_OW / BLOCK_NR, BLOCK_NR});
+  )
 
-  float Alpha = 1.0, Zero = 0.0, One = 1.0;
+  float Zero = 0.0, One = 1.0, Alpha = One;
   auto *CTile = new float[BLOCK_MR * BLOCK_NR];
   // std::cout << "Yaconv GEMMs: " << OH << " \"" << BLOCK_M << " x " << KH * KW * C << " x " << BLOCK_OW << "\"\n";
 
@@ -273,24 +275,26 @@ float *yaconv(const float *Input, float *Kernel, unsigned C,
       unsigned NR = MIN(OW - jr, BLOCK_NR);
 
       for (unsigned h = 0; h < OH; ++h) {
-        auto *Ar = KernelPack + ir * KH * KW * C;
-        auto *Br = InputPack + jr * H * KW * C + h * KW * C * BLOCK_NR;
-        auto *Cr = Output + ir * OH * OW + h * OW + jr;
 
-        // Full tiles
-        if ((MR == BLOCK_MR) && (NR == BLOCK_NR)) {
+        for (unsigned kc = 0; kc < KH * KW * C; kc += BLOCK_KC) {
 
-          float Beta = h == 0 ? Zero : One;
-          blisGemmUKR(KH * KW * C, &Alpha, Ar, Br, &Beta, Cr, OH * OW, 1, data, cntx);
-          // printTensor(Output, {M, OH * OW});
+          auto *Ar = KernelPack + ir * KH * KW * C + kc * BLOCK_MR;
+          auto *Br = InputPack + jr * H * KW * C + h * KW * C * BLOCK_NR + kc * BLOCK_NR;
+          auto *Cr = Output + ir * OH * OW + h * OW + jr;
 
-        // Remainder tiles
-        } else {
+          unsigned KC = MIN(KH * KW * C - kc, BLOCK_KC);
+          // printTensor(Ar, {KC, BLOCK_MR});
+          // printTensor(Br, {KC, BLOCK_NR});
 
-          blisGemmUKR(KH * KW * C, &Alpha, Ar, Br, &Zero, CTile, BLOCK_NR, 1, data, cntx);
-          bli_scopym(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE, MR, NR, CTile, BLOCK_NR, 1, Cr, OH * OW, 1);
-          // printTensor(Output, {M, OH * OW});
-
+          float Beta = kc == 0 ? Zero : One;
+          if ((MR == BLOCK_MR) && (NR == BLOCK_NR))
+            // Full tiles
+            blisGemmUKR(KC, &Alpha, Ar, Br, &Beta, Cr, OH * OW, 1, data, cntx);
+          else {
+            // Remainder tiles
+            blisGemmUKR(KC, &Alpha, Ar, Br, &Beta, CTile, BLOCK_NR, 1, data, cntx);
+            bli_scopym(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE, MR, NR, CTile, BLOCK_NR, 1, Cr, OH * OW, 1);
+          }
         }
       }
     }
