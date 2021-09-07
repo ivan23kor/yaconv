@@ -184,7 +184,118 @@ auto *convMecNCHW(const float *Input, const float *Kernel, unsigned C,
                        << "]\n";
              std::cout << std::string(80, '-') << "\n\n";)
 
+  //printTensor(InputBuf, {H * KW * C, OW});
+
   delete[] KernelBuf, InputBuf;
+
+  return Output;
+}
+//---------------------------------------------------------------------------
+
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//+++ YaConv +++
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+void packKernel(const float *Kernel, float *Pack, unsigned M, unsigned C, unsigned KH, unsigned KW) {
+  unsigned To = 0;
+  for (unsigned ic = 0; ic < M; ic += BLOCK_MR) {
+    unsigned MR = MIN(M - ic, BLOCK_MR);
+    for (unsigned k = 0; k < KH * KW * C; ++k) {
+      for (unsigned ir = 0; ir < MR; ++ir) {
+        unsigned m = ic + ir;
+        unsigned c = k % C;
+        unsigned h = k / C / KW;
+        unsigned w = k / C % KW;
+        unsigned From = m * C * KH * KW + c * KH * KW + h * KW + w;
+        // std::cout << From << " -> " << To++ << "\n";
+        Pack[To++] = Kernel[From];
+      }
+      for (unsigned End = To + BLOCK_MR - MR; To != End; ++To)
+        Pack[To] = 0.0;
+    }
+  }
+}
+
+void packInput(const float *Input, float *Pack, unsigned C, unsigned H, unsigned W, unsigned KH, unsigned KW, unsigned OW) {
+  unsigned To = 0;
+  for (unsigned jc = 0; jc < OW; jc += BLOCK_NR) {
+    unsigned NR = MIN(OW - jc, BLOCK_NR);
+    for (unsigned k = 0; k < H * KW * C; ++k) {
+      for (unsigned jr = 0; jr < NR; ++jr) {
+        unsigned c = k % C;
+        unsigned h = k / C / KW;
+        unsigned w = k / C % KW;
+        unsigned From = c * H * W + h * W + w + jc + jr;
+        // std::cout << From << " -> " << To++ << "\n";
+        Pack[To++] = Input[From];
+      }
+      for (unsigned End = To + BLOCK_NR - NR; To != End; ++To)
+        Pack[To] = 0.0;
+    }
+  }
+}
+
+float *yaconv(const float *Input, float *Kernel, unsigned C,
+              unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW,
+              unsigned OH, unsigned OW, unsigned PadH, unsigned PadW,
+              unsigned StrideH, unsigned StrideW, unsigned DilH, unsigned DilW) {
+
+  unsigned BLOCK_OW = OW % BLOCK_NR == 0 ? OW : OW + BLOCK_NR - OW % BLOCK_NR;
+  unsigned BLOCK_M = M % BLOCK_MR == 0 ? M : M + BLOCK_MR - M % BLOCK_MR;
+
+  TIME(
+  auto *Output =
+      (float *)aligned_alloc(4096, M * OH * OW * sizeof(float));
+  auto *KernelPack =
+      (float *)aligned_alloc(4096, BLOCK_M * KH * KW * C * sizeof(float));
+  auto *InputPack =
+      (float *)aligned_alloc(4096, H * KW * C * BLOCK_OW * sizeof(float));
+  )
+
+  TIME(packKernel(Kernel, KernelPack, M, C, KH, KW);)
+  TIME(packInput(Input, InputPack, C, H, W, KH, KW, OW);)
+
+  std::cout << "Packed Kernel:\n";
+  printTensor(KernelPack, {KH * KW * C * BLOCK_M / BLOCK_MR, BLOCK_MR});
+  std::cout << "Packed Input:\n";
+  printTensor(InputPack, {H * KW * C * BLOCK_OW / BLOCK_NR, BLOCK_NR});
+
+  float Alpha = 1.0, Zero = 0.0, One = 1.0;
+  auto *CTile = new float[BLOCK_MR * BLOCK_NR];
+  // std::cout << "Yaconv GEMMs: " << OH << " \"" << BLOCK_M << " x " << KH * KW * C << " x " << BLOCK_OW << "\"\n";
+
+  TIME(
+  for (unsigned ir = 0; ir < M; ir += BLOCK_MR) {
+
+    unsigned MR = MIN(M - ir, BLOCK_MR);
+
+    for (unsigned jr = 0; jr < OW; jr += BLOCK_NR) {
+
+      unsigned NR = MIN(OW - jr, BLOCK_NR);
+
+      for (unsigned h = 0; h < OH; ++h) {
+        auto *Ar = KernelPack + ir * KH * KW * C;
+        auto *Br = InputPack + jr * H * KW * C + h * KW * C * BLOCK_NR;
+        auto *Cr = Output + ir * OH * OW + h * OW + jr;
+
+        // Full tiles
+        if ((MR == BLOCK_MR) && (NR == BLOCK_NR)) {
+
+          float Beta = h == 0 ? Zero : One;
+          blisGemmUKR(KH * KW * C, &Alpha, Ar, Br, &Beta, Cr, OH * OW, 1, data, cntx);
+          // printTensor(Output, {M, OH * OW});
+
+        // Remainder tiles
+        } else {
+
+          blisGemmUKR(KH * KW * C, &Alpha, Ar, Br, &Zero, CTile, BLOCK_NR, 1, data, cntx);
+          bli_scopym(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE, MR, NR, CTile, BLOCK_NR, 1, Cr, OH * OW, 1);
+          // printTensor(Output, {M, OH * OW});
+
+        }
+      }
+    }
+  }
+  )
 
   return Output;
 }

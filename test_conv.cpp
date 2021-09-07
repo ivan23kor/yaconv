@@ -60,15 +60,17 @@ int main(int argc, char **argv) {
   }                                                                            \
   Times.push_back(TempTime);
 
-  // Convolution with im2col
-  // RUN(convIm2col(Input, Kernel, Outputs.back(), C, H, W, M, KH, KW, OH, OW,
-  // 0, 0, 1, 1, 1, 1))
-
-  // Convolution with MEC for NCHW format
-  RUN(Outputs.back() = convMecNCHW(Input, Kernel, C, H, W, M, KH, KW))
+  // // Convolution with im2col
+  // RUN(convIm2col(Input, Kernel, Outputs.back(), C, H, W, M, KH, KW, OH, OW, 0, 0, 1, 1, 1, 1))
 
   // // Convolution with fused im2col+packing
   // RUN(Outputs.back() = convGemm(Input, Kernel, C, H, W, M, KH, KW))
+
+  // // Convolution with MEC for NCHW format
+  // RUN(Outputs.back() = convMecNCHW(Input, Kernel, C, H, W, M, KH, KW))
+
+  // Yaconv
+  RUN(Outputs.back() = yaconv(Input, Kernel, C, H, W, M, KH, KW, OH, OW, 0, 0, 1, 1, 1, 1))
 
   // Print times for each run
   for (const auto &Time : Times)
