@@ -59,8 +59,8 @@ bool tensorsEqual(std::vector<float *> Tensors, const unsigned Size,
 
 void printVector(float *Vector, unsigned Len, const std::string Pre = "",
                  const std::string Post = "\n", int Setw = 3) {
-  std::cout << Pre << "[" << Vector[0];
-  for (unsigned i = 1; i < Len; ++i)
+  std::cout << Pre << "[";
+  for (unsigned i = 0; i < Len; ++i)
     std::cout << std::setw(Setw + 1) << Vector[i];
   std::cout << "]" << Post;
 }
