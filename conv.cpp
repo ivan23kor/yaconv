@@ -1,37 +1,18 @@
-#include "gemm.hpp"
-#include "utils.h"
-#include <blis.h>
-#include <chrono>
+#include "gemm.hpp"   // custom gemm
+#include "utils.hpp"  // Tensor aligned allocation and printing
+#include <blis.h>     // BLIS microkernel and block sizes
+#include <chrono>     // Timing
 #include <iostream>
-#include <stdlib.h>
 
 using namespace std::chrono;
+static high_resolution_clock::time_point t1, t2;
 
 namespace {
-#include "set_blis_params.h"
-
-high_resolution_clock::time_point t1, t2;
+#include "blis_params.hpp"
 }; // namespace
 
-#define CONV_DEBUG(expr)                                                       \
-  if (DEBUG == 1) {                                                            \
-    expr;                                                                      \
-  }
-
-#define MIN(a, b) a < b ? a : b
-
-// A dirty macro to time parts of the algorithms
-#ifndef TIME
-#define TIME(cmd)                                                              \
-  t1 = high_resolution_clock::now();                                           \
-  cmd;                                                                         \
-  t2 = high_resolution_clock::now();                                           \
-  Times.push_back(duration_cast<duration<double>>(t2 - t1).count());
-#else
-#undef TIME
-#define TIME(cmd) cmd;
-#endif
-
+// Defined in test_conv.cpp (driver code for convolutions)
+// Algorithms in this file will append times to this vector
 extern std::vector<double> Times;
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -100,7 +81,7 @@ void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
   unsigned rsc = N;
   unsigned csc = 1;
 
-  CONV_DEBUG(std::cout << "=== Im2col ===\n";
+  IF_DEBUG(std::cout << "=== Im2col ===\n";
              std::cout << "InputBuf: " << C * KH * KW << " x " << OH * OW
                        << "\n";
              std::cout << "1 x GEMM[" << M << " x " << K << " x " << N << "]\n";
@@ -183,7 +164,7 @@ auto *convMecNCHW(const float *Input, const float *Kernel, unsigned C,
            gemm(KernelBuf, InputBuf + oh * C * KW * OW, Output + oh * OW, M, K,
                 N, LDA, LDB, LDC, 1.0, 0.0);)
 
-  CONV_DEBUG(std::cout << "=== Mec-NCHW ===\n";
+  IF_DEBUG(std::cout << "=== Mec-NCHW ===\n";
              std::cout << "KernelBuf: " << M << " x " << KH * KW * C << "\n";
              std::cout << "InputBuf: " << C * H * KW << " x " << OW << "\n";
              std::cout << OH << " x GEMM[" << M << " x " << K << " x " << N
@@ -193,112 +174,6 @@ auto *convMecNCHW(const float *Input, const float *Kernel, unsigned C,
   //printTensor(InputBuf, {H * KW * C, OW});
 
   delete[] KernelBuf, InputBuf;
-
-  return Output;
-}
-//---------------------------------------------------------------------------
-
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//+++ YaConv +++
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-void packKernel(const float *Kernel, float *Pack, unsigned M, unsigned C, unsigned KH, unsigned KW) {
-  unsigned To = 0;
-  for (unsigned ic = 0; ic < M; ic += BLOCK_MR) {
-    unsigned MR = MIN(M - ic, BLOCK_MR);
-    for (unsigned k = 0; k < KH * KW * C; ++k) {
-      for (unsigned ir = 0; ir < BLOCK_MR; ++ir) {
-        unsigned m = ic + ir;
-        unsigned c = k % C;
-        unsigned h = k / C / KW;
-        unsigned w = k / C % KW;
-        unsigned From = m * C * KH * KW + c * KH * KW + h * KW + w;
-        // std::cout << From << " -> " << To++ << "\n";
-        Pack[To++] = ir < MR ? Kernel[From] : 0.0;
-      }
-    }
-  }
-}
-
-void packInput(const float *Input, float *Pack, unsigned C, unsigned H, unsigned W, unsigned KH, unsigned KW, unsigned OW) {
-  unsigned To = 0;
-  for (unsigned jc = 0; jc < OW; jc += BLOCK_NR) {
-    unsigned NR = MIN(OW - jc, BLOCK_NR);
-    for (unsigned k = 0; k < H * KW * C; ++k) {
-      for (unsigned jr = 0; jr < BLOCK_NR; ++jr) {
-        unsigned c = k % C;
-        unsigned h = k / C / KW;
-        unsigned w = k / C % KW;
-        unsigned From = c * H * W + h * W + w + jc + jr;
-        // std::cout << From << " -> " << To++ << "\n";
-        Pack[To++] = jr < NR ? Input[From] : 0.0;
-      }
-    }
-  }
-}
-
-float *yaconv(const float *Input, float *Kernel, unsigned C,
-              unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW,
-              unsigned OH, unsigned OW, unsigned PadH, unsigned PadW,
-              unsigned StrideH, unsigned StrideW, unsigned DilH, unsigned DilW) {
-
-  unsigned BLOCK_OW = OW % BLOCK_NR == 0 ? OW : OW + BLOCK_NR - OW % BLOCK_NR;
-  unsigned BLOCK_M = M % BLOCK_MR == 0 ? M : M + BLOCK_MR - M % BLOCK_MR;
-
-  TIME(
-  auto *Output = alignedAlloc(M * OH * OW);
-  auto *KernelPack = alignedAlloc(BLOCK_M * KH * KW * C);
-  auto *InputPack = alignedAlloc(H * KW * C * BLOCK_OW);
-  )
-
-  TIME(packKernel(Kernel, KernelPack, M, C, KH, KW);)
-  TIME(packInput(Input, InputPack, C, H, W, KH, KW, OW);)
-
-  CONV_DEBUG(
-  std::cout << "Packed Kernel:\n";
-  printTensor(KernelPack, {KH * KW * C * BLOCK_M / BLOCK_MR, BLOCK_MR});
-  std::cout << "Packed Input:\n";
-  printTensor(InputPack, {H * KW * C * BLOCK_OW / BLOCK_NR, BLOCK_NR});
-  )
-
-  float Zero = 0.0, One = 1.0, Alpha = One;
-  auto *CTile = new float[BLOCK_MR * BLOCK_NR];
-  // std::cout << "Yaconv GEMMs: " << OH << " \"" << BLOCK_M << " x " << KH * KW * C << " x " << BLOCK_OW << "\"\n";
-
-  TIME(
-  for (unsigned ir = 0; ir < M; ir += BLOCK_MR) {
-
-    unsigned MR = MIN(M - ir, BLOCK_MR);
-
-    for (unsigned jr = 0; jr < OW; jr += BLOCK_NR) {
-
-      unsigned NR = MIN(OW - jr, BLOCK_NR);
-
-      for (unsigned h = 0; h < OH; ++h) {
-
-        for (unsigned kc = 0; kc < KH * KW * C; kc += BLOCK_KC) {
-
-          auto *Ar = KernelPack + ir * KH * KW * C + kc * BLOCK_MR;
-          auto *Br = InputPack + jr * H * KW * C + h * KW * C * BLOCK_NR + kc * BLOCK_NR;
-          auto *Cr = Output + ir * OH * OW + h * OW + jr;
-
-          unsigned KC = MIN(KH * KW * C - kc, BLOCK_KC);
-          // printTensor(Ar, {KC, BLOCK_MR});
-          // printTensor(Br, {KC, BLOCK_NR});
-
-          float Beta = kc == 0 ? Zero : One;
-          if ((MR == BLOCK_MR) && (NR == BLOCK_NR))
-            // Full tiles
-            blisGemmUKR(KC, &Alpha, Ar, Br, &Beta, Cr, OH * OW, 1, data, cntx);
-          else {
-            // Remainder tiles
-            blisGemmUKR(KC, &Alpha, Ar, Br, &Beta, CTile, BLOCK_NR, 1, data, cntx);
-            bli_scopym(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE, MR, NR, CTile, BLOCK_NR, 1, Cr, OH * OW, 1);
-          }
-        }
-      }
-    }
-  }
-  )
 
   return Output;
 }

@@ -1,14 +1,10 @@
-#include "utils.h"
+#include "utils.hpp"
 #include <blis.h>
 #include <iostream>
 #include <stdlib.h>
 
-#define MIN(a, b) a < b ? a : b
-
 namespace {
-
-#include "set_blis_params.h"
-
+#include "blis_params.hpp"
 }; // namespace
 
 // TODO: hopefully, the compiler is doing if-unswitching here.
