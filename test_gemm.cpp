@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
   const uint64_t Flops = 2 * (uint64_t)M * (uint64_t)K * (uint64_t)N;
 
 #define RUN(f)                                                                 \
-  Outputs.push_back(allocateTensor(M *N));                                     \
+  Outputs.push_back(alignedAlloc(M * N));                                      \
   TempTime = 0.0;                                                              \
   for (unsigned i = 0; i < Repeat; ++i) {                                      \
     t1 = high_resolution_clock::now();                                         \

@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
   std::vector<float *> Outputs;
 
 #define RUN(f)                                                                 \
-  Outputs.push_back(allocateTensor(M *OH *OW));                                \
+  Outputs.push_back(alignedAlloc(M * OH * OW));                                \
   TempTime = 0.0;                                                              \
   for (unsigned i = 0; i < Repeat; ++i) {                                      \
     t1 = high_resolution_clock::now();                                         \

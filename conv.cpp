@@ -88,7 +88,7 @@ void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
                 unsigned StrideH, unsigned StrideW, unsigned DilH,
                 unsigned DilW) {
 
-  TIME(float *InputBuf = allocateTensor(C * KH * KW * OH * OW);)
+  TIME(float *InputBuf = alignedAlloc(C * KH * KW * OH * OW);)
   TIME(im2col(Input, C, H, W, KH, KW, 0, 0, 1, 1, 1, 1, InputBuf);)
 
   unsigned K = C * KH * KW;
@@ -166,9 +166,11 @@ auto *convMecNCHW(const float *Input, const float *Kernel, unsigned C,
 
   unsigned OH = H - KH + 1, OW = W - KW + 1;
 
-  TIME(auto *Output = allocateTensor(M * OH * OW);
-       auto *KernelBuf = allocateTensor(M * KH * KW * C);
-       auto *InputBuf = allocateTensor(C * H * KW * OW);)
+  TIME(
+  auto *Output = alignedAlloc(M * OH * OW);
+  auto *KernelBuf = alignedAlloc(M * KH * KW * C);
+  auto *InputBuf = alignedAlloc(C * H * KW * OW);
+  )
 
   TIME(mecNCHWTransformKernel(Kernel, KernelBuf, M, C, KH, KW);)
   TIME(mecNCHWTransformInput(Input, InputBuf, C, H, W, KH, KW);)
@@ -243,12 +245,9 @@ float *yaconv(const float *Input, float *Kernel, unsigned C,
   unsigned BLOCK_M = M % BLOCK_MR == 0 ? M : M + BLOCK_MR - M % BLOCK_MR;
 
   TIME(
-  auto *Output =
-      (float *)aligned_alloc(4096, M * OH * OW * sizeof(float));
-  auto *KernelPack =
-      (float *)aligned_alloc(4096, BLOCK_M * KH * KW * C * sizeof(float));
-  auto *InputPack =
-      (float *)aligned_alloc(4096, H * KW * C * BLOCK_OW * sizeof(float));
+  auto *Output = alignedAlloc(M * OH * OW);
+  auto *KernelPack = alignedAlloc(BLOCK_M * KH * KW * C);
+  auto *InputPack = alignedAlloc(H * KW * C * BLOCK_OW);
   )
 
   TIME(packKernel(Kernel, KernelPack, M, C, KH, KW);)
@@ -398,12 +397,9 @@ void sPack_im2Col(unsigned int i, unsigned int j, const float *In,
 auto *convGemm(const float *Input, const float *Kernel, unsigned C_, unsigned H,
                unsigned W, unsigned M, unsigned KH, unsigned KW) {
 
-  auto *APack =
-      (float *)aligned_alloc(4096, BLOCK_MC * BLOCK_KC * sizeof(float));
-  auto *BPack =
-      (float *)aligned_alloc(4096, BLOCK_KC * BLOCK_NC * sizeof(float));
-  auto *CBuff =
-      (float *)aligned_alloc(4096, BLOCK_MR * BLOCK_NR * sizeof(float));
+  auto *APack = alignedAlloc(BLOCK_MC * BLOCK_KC);
+  auto *BPack = alignedAlloc(BLOCK_KC * BLOCK_NC);
+  auto *CBuff = alignedAlloc(BLOCK_MR * BLOCK_NR);
 
   unsigned OH = H - KH + 1, OW = W - KW + 1;
 
@@ -414,13 +410,14 @@ auto *convGemm(const float *Input, const float *Kernel, unsigned C_, unsigned H,
   unsigned LDA = K, LDC = N;
 
   const float *A = Kernel, *B = Input;
-  auto *C = allocateTensor(M * OH * OW);
+  auto *C = alignedAlloc(M * OH * OW);
 
   float Alpha = 1.0, Beta = 0.0;
 
   // C *= Beta
-  TIME(bli_sscalm(BLIS_NO_CONJUGATE, 0, BLIS_NONUNIT_DIAG, BLIS_DENSE, M, N,
-                  &Beta, C, LDC, 1);)
+  TIME(
+  bli_sscalm(BLIS_NO_CONJUGATE, 0, BLIS_NONUNIT_DIAG, BLIS_DENSE, M, N, &Beta, C, LDC, 1);
+  )
 
   float Zero = 0.0, One = 1.0;
   for (unsigned jc = 0; jc < N; jc += BLOCK_NC) {

@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-float *allocateTensor(unsigned Size);
+float *alignedAlloc(unsigned Size, unsigned Alignment = 4096);
 
 void randomizeTensor(float *&Tensor, unsigned Size, unsigned MaxVal = 256);
 

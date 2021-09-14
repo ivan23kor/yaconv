@@ -50,12 +50,9 @@ void gemm(const float *A, const float *B, float *C, unsigned M, unsigned K,
           unsigned N, unsigned LDA, unsigned LDB, unsigned LDC, float Alpha,
           float Beta) {
 
-  auto *APack =
-      (float *)aligned_alloc(4096, BLOCK_MC * BLOCK_KC * sizeof(float));
-  auto *BPack =
-      (float *)aligned_alloc(4096, BLOCK_KC * BLOCK_NC * sizeof(float));
-  auto *CBuff =
-      (float *)aligned_alloc(4096, BLOCK_MR * BLOCK_NR * sizeof(float));
+  auto *APack = alignedAlloc(BLOCK_MC * BLOCK_KC);
+  auto *BPack = alignedAlloc(BLOCK_KC * BLOCK_NC);
+  auto *CBuff = alignedAlloc(BLOCK_MR * BLOCK_NR);
 
   // C *= Beta
   bli_sscalm(BLIS_NO_CONJUGATE, 0, BLIS_NONUNIT_DIAG, BLIS_DENSE, M, N, &Beta,
