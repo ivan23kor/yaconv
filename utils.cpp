@@ -18,15 +18,15 @@ void fillTensor(float *&Tensor, unsigned Size, float Value) {
     Tensor[i] = Value < 0. ? i + 1 : Value;
 }
 
-float *allocateFilledTensor(unsigned Size, float Value) {
-  auto *Tensor = alignedAlloc(Size);
+float *allocateFilledTensor(unsigned Size, float Value, bool Aligned) {
+  auto *Tensor = Aligned ? alignedAlloc(Size) : new float[Size];
   fillTensor(Tensor, Size, Value);
   return Tensor;
 }
 
-float *allocateRandomTensor(unsigned Size, unsigned MaxVal) {
-  auto *Tensor = alignedAlloc(Size);
-  randomizeTensor(Tensor, Size);
+float *allocateRandomTensor(unsigned Size, unsigned MaxVal, bool Aligned) {
+  auto *Tensor = Aligned ? alignedAlloc(Size) : new float[Size];
+  randomizeTensor(Tensor, Size, MaxVal);
   return Tensor;
 }
 
@@ -93,7 +93,7 @@ void printTensor(float *Tensor, std::vector<unsigned> Sizes, std::string Pre,
   std::cout << FirstPre << "[";
 
   std::vector<unsigned> NewSizes(++Sizes.begin(), Sizes.end());
-  if (Sizes[0] == 1) {
+  if (Sizes[0] <= 1) {
     printTensor(Tensor, NewSizes, Pre, "]" + Post, true, Setw);
     return;
   }

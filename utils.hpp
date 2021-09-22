@@ -43,9 +43,9 @@ void randomizeTensor(float *&Tensor, unsigned Size, unsigned MaxVal = 256);
 
 void fillTensor(float *&Tensor, unsigned Size, float Value = -1.);
 
-float *allocateFilledTensor(unsigned Size, float Value = -1.);
+float *allocateFilledTensor(unsigned Size, float Value = -1., bool Aligned = false);
 
-float *allocateRandomTensor(unsigned Size, unsigned MaxVal = 256);
+float *allocateRandomTensor(unsigned Size, unsigned MaxVal = 256, bool Aligned = false);
 
 bool tensorsEqual(std::vector<float *>, const unsigned Size,
                   const float Epsilon = 1e-6);
