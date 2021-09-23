@@ -19,10 +19,11 @@ void packA(const float *Block, float *&Pack, unsigned LDA, unsigned MC,
   for (unsigned ic = 0; ic < MC; ic += BLOCK_MR) {
     unsigned MR = MIN(MC - ic, BLOCK_MR);
     for (unsigned k = 0; k < KC; ++k) {
-      for (unsigned ir = 0; ir < BLOCK_MR; ++ir) {
+      for (unsigned ir = 0; ir < MR; ++ir) {
         unsigned From = (ic + ir) * LDA + k;
-        Pack[To++] = ir < MR ? Block[From] : 0.0;
+        Pack[To++] = Block[From];
       }
+      To += BLOCK_MR - MR;
     }
   }
 }
@@ -34,10 +35,11 @@ void packB(const float *Block, float *&Pack, unsigned LDB, unsigned KC,
   for (unsigned jc = 0; jc < NC; jc += BLOCK_NR) {
     unsigned NR = MIN(NC - jc, BLOCK_NR);
     for (unsigned k = 0; k < KC; ++k) {
-      for (unsigned jr = 0; jr < BLOCK_NR; ++jr) {
+      for (unsigned jr = 0; jr < NR; ++jr) {
         unsigned From = jc + jr + LDB * k;
-        Pack[To++] = jr < NR ? Block[From] : 0.0;
+        Pack[To++] = Block[From];
       }
+      To += BLOCK_NR - NR;
     }
   }
 }
