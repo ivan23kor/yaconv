@@ -37,15 +37,15 @@
   }                                                                            \
   Times.push_back(TempTime);
 
-float *alignedAlloc(unsigned Size, unsigned Alignment = 4096);
+float *alignedAlloc(unsigned Size, int Alignment = 4096);
 
 void randomizeTensor(float *&Tensor, unsigned Size, unsigned MaxVal = 256);
 
 void fillTensor(float *&Tensor, unsigned Size, float Value = -1.);
 
-float *allocateFilledTensor(unsigned Size, float Value = -1., bool Aligned = false);
+float *allocateFilledTensor(unsigned Size, float Value = -1., int Alignment = -1);
 
-float *allocateRandomTensor(unsigned Size, unsigned MaxVal = 256, bool Aligned = false);
+float *allocateRandomTensor(unsigned Size, unsigned MaxVal = 256, int Alignment = -1);
 
 bool tensorsEqual(std::vector<float *>, const unsigned Size,
                   const float Epsilon = 1e-6);

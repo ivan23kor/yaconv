@@ -3,7 +3,7 @@
 #include <iomanip>
 #include <iostream>
 
-float *alignedAlloc(unsigned Size, unsigned Alignment) {
+float *alignedAlloc(unsigned Size, int Alignment) {
   return (float *)aligned_alloc(Alignment, Size * sizeof(float));
 }
 
@@ -18,14 +18,14 @@ void fillTensor(float *&Tensor, unsigned Size, float Value) {
     Tensor[i] = Value < 0. ? i + 1 : Value;
 }
 
-float *allocateFilledTensor(unsigned Size, float Value, bool Aligned) {
-  auto *Tensor = Aligned ? alignedAlloc(Size) : new float[Size];
+float *allocateFilledTensor(unsigned Size, float Value, int Alignment) {
+  auto *Tensor = Alignment > 0 ? alignedAlloc(Size) : new float[Size];
   fillTensor(Tensor, Size, Value);
   return Tensor;
 }
 
-float *allocateRandomTensor(unsigned Size, unsigned MaxVal, bool Aligned) {
-  auto *Tensor = Aligned ? alignedAlloc(Size) : new float[Size];
+float *allocateRandomTensor(unsigned Size, unsigned MaxVal, int Alignment) {
+  auto *Tensor = Alignment > 0 ? alignedAlloc(Size) : new float[Size];
   randomizeTensor(Tensor, Size, MaxVal);
   return Tensor;
 }
