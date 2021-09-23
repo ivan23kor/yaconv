@@ -65,21 +65,14 @@ void im2col(const float *data_im, const int channels, const int height,
 
 void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
                 unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW,
-                unsigned OH, unsigned OW, unsigned PadH, unsigned PadW,
-                unsigned StrideH, unsigned StrideW, unsigned DilH,
-                unsigned DilW) {
+                unsigned OH, unsigned OW, unsigned PH, unsigned PW,
+                unsigned SH, unsigned SW) {
 
-  TIME(float *InputBuf = alignedAlloc(C * KH * KW * OH * OW);)
-  TIME(im2col(Input, C, H, W, KH, KW, 0, 0, 1, 1, 1, 1, InputBuf);)
+  float *InputBuf = alignedAlloc(C * KH * KW * OH * OW);
+  TIME(im2col(Input, C, H, W, KH, KW, PH, PW, SH, SW, 1, 1, InputBuf);)
 
   unsigned K = C * KH * KW;
   unsigned N = OH * OW;
-  unsigned rsa = K;
-  unsigned csa = 1;
-  unsigned rsb = N;
-  unsigned csb = 1;
-  unsigned rsc = N;
-  unsigned csc = 1;
 
   IF_DEBUG(std::cout << "=== Im2col ===\n";
              std::cout << "InputBuf: " << C * KH * KW << " x " << OH * OW
@@ -87,10 +80,18 @@ void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
              std::cout << "1 x GEMM[" << M << " x " << K << " x " << N << "]\n";
              std::cout << std::string(80, '-') << "\n\n";)
 
-  TIME(gemm(Kernel, InputBuf, Output, M, K, N, K, N, N, 1.0, 0.0);)
+  gemm(Kernel, InputBuf, Output, M, K, N, K, N, N, 1.0, 0.0);
+  // TIME(gemm(Kernel, InputBuf, Output, M, K, N, K, N, N, 1.0, 0.0);)
+
   // TODO: For a fair comparison, calling custom gemm that is similar to
-  // other convolution implementations in this file. Replace with a call to
-  // OpenBLAS/BLIS/MKL/ESSL later.
+  // other convolution implementations. Replace with a lib call later.
+  // unsigned rsa = K;
+  // unsigned csa = 1;
+  // unsigned rsb = N;
+  // unsigned csb = 1;
+  // unsigned rsc = N;
+  // unsigned csc = 1;
+  // float alpha = 1.0, beta = 0.0;
   // bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &alpha, Kernel,
   //           rsa, csa, InputBuf, rsb, csb, &beta, Output, rsc, csc);
 

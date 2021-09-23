@@ -10,9 +10,8 @@ void im2col(const float *data_im, const int channels, const int height,
 
 void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
                 unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW,
-                unsigned OH, unsigned OW, unsigned PadH, unsigned PadW,
-                unsigned StrideH, unsigned StrideW, unsigned DilH,
-                unsigned DilW);
+                unsigned OH, unsigned OW, unsigned PH, unsigned PW,
+                unsigned SH, unsigned SW);
 
 void mecNCHWTransformKernel(const float *Kernel, float *Output, unsigned M,
                             unsigned C, unsigned KH, unsigned KW);
