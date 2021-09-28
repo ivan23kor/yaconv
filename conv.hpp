@@ -13,15 +13,5 @@ void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
                 unsigned OH, unsigned OW, unsigned PH, unsigned PW,
                 unsigned SH, unsigned SW);
 
-void mecNCHWTransformKernel(const float *Kernel, float *Output, unsigned M,
-                            unsigned C, unsigned KH, unsigned KW);
-
-void mecNCHWTransformInput(const float *Input, float *Output, unsigned C,
-                           unsigned H, unsigned W, unsigned KH, unsigned KW);
-
-float *convMecNCHW(const float *Input, const float *Kernel, unsigned C,
-                   unsigned H, unsigned W, unsigned M, unsigned KH,
-                   unsigned KW);
-
 float *convGemm(const float *Input, const float *Kernel, unsigned C, unsigned H,
                 unsigned W, unsigned M, unsigned KH, unsigned KW);
