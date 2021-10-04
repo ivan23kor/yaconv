@@ -35,7 +35,7 @@
     t2 = high_resolution_clock::now();                                         \
     TempTime += duration_cast<duration<double>>(t2 - t1).count();              \
   }                                                                            \
-  Times.push_back(TempTime);
+  Times.push_back(TempTime / Repeat);
 
 float *alignedAlloc(unsigned Size, int Alignment = 4096);
 
