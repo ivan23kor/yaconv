@@ -12,6 +12,8 @@ using namespace std::chrono;
 // this vector
 std::vector<double> Times;
 
+extern double PackImageTime, PackFilterTime;
+
 int main(int argc, char **argv) {
   // For now, N == 1
   if (argc < 11) {
@@ -68,6 +70,8 @@ int main(int argc, char **argv) {
   // Print times for each run
   for (const auto &Time : Times)
     std::cout << Time << "\n";
+  std::cout << "PackImageTime: " << PackImageTime / Repeat << "\n";
+  std::cout << "PackFilterTime: " << PackFilterTime / Repeat << "\n";
 
   return 0; //tensorsEqual(Outputs, M * OH * OW) ? 0 : -1;
 }

@@ -6,12 +6,19 @@
 #include <iostream>   // Debug printing
 #include <set>        // Group construction
 
+// Timing
 using namespace std::chrono;
-static high_resolution_clock::time_point t1, t2;
+static high_resolution_clock::time_point t1, t2, t3, t4, t5, t6;
+double PackImageTime = 0.0, PackFilterTime = 0.0;
 
 namespace {
 #include "blis_params.hpp"
 }; // namespace
+
+// Convolution parameters as global variables for this compilation unit.
+// Saves a lot of time passing them around different functions.
+// static unsigned C, H, W, FH, FW, PH, PW, SH, SW;
+// C = C_, H = H_, W = W_, FH = FH_, FW = FW_, PH = PH_, PW = PW_, SH = SH_, SW = SW_;
 
 // Defined in test_conv.cpp (driver code for convolutions)
 // Algorithms in this file will append times to this vector
@@ -65,6 +72,18 @@ void packImageCenter(float *ImageOff, float *Pack, unsigned MS, unsigned MC,
   }
 }
 
+// inline void copyBufferToOutput(float *TmpOutput, float *Output,
+//     unsigned ImageStart, unsigned ImageEnd, unsigned FilterStart, unsigned FilterEnd) {
+//   for (unsigned j = FilterStart; j < FilterEnd; ++j) {
+//     unsigned m = j / FW % M;
+//     unsigned fh = j / FW / M;
+//     unsigned fw = j % FW;
+//     for (unsigned i = ImageStart; i < ImageEnd; ++i) {
+//       unsigned h = i
+//     }
+//   }
+// }
+
 void yaconv(float *Image, float *Filter, float *Output, unsigned C,
             unsigned H, unsigned W, unsigned M, unsigned FH, unsigned FW,
             unsigned SH, unsigned SW, unsigned PH, unsigned PW) {
@@ -105,10 +124,6 @@ void yaconv(float *Image, float *Filter, float *Output, unsigned C,
   auto *FilterPack = alignedAlloc(BLOCK_KC * BLOCK_NC);
   auto *TmpOutput = alignedAlloc(BLOCK_MR * BLOCK_NR);
 
-  // Timing
-  high_resolution_clock::time_point p1, p2, p3, p4;
-  double PackImageTime = 0.0, PackFilterTime = 0.0;
-
   // GEMM alpha, beta
   float Alpha = 1.0, One = 1.0;
 
@@ -117,20 +132,30 @@ void yaconv(float *Image, float *Filter, float *Output, unsigned C,
 
     unsigned NC = MIN(M * FH * FW - nc, BLOCK_NC);
 
-    // p1 = high_resolution_clock::now();
+#define DO_NOT_TIME_PACK_FILTER_TIME 1
+#ifndef DO_NOT_TIME_PACK_FILTER_TIME
+    t3 = high_resolution_clock::now();
+#endif
     packFilter(Filter, FilterPack, nc, NC, M, C, FH, FW);
-    // p2 = high_resolution_clock::now();
-    // PackFilterTime += duration_cast<duration<double>>(p2 - p1).count();
+#ifndef DO_NOT_TIME_PACK_FILTER_TIME
+    t4 = high_resolution_clock::now();
+    PackFilterTime += duration_cast<duration<double>>(t4 - t3).count();
+#endif
     // printTensor(FilterPack, {C * (unsigned)std::ceil((float)NC / (float)BLOCK_NR), BLOCK_NR});
 
     for (unsigned mc = 0; mc < CenterSize; mc += BLOCK_MC) {
 
       unsigned MC = MIN(CenterSize - mc, BLOCK_MC);
 
-      p3 = high_resolution_clock::now();
+#define DO_NOT_TIME_PACK_IMAGE_TIME 1
+#ifndef DO_NOT_TIME_PACK_IMAGE_TIME
+      t5 = high_resolution_clock::now();
+#endif
       packImageCenter(Image + Off, ImagePack, mc, MC, C, H, W, CenterW, 2 * GapW);
-      p4 = high_resolution_clock::now();
-      PackImageTime += duration_cast<duration<double>>(p4 - p3).count();
+#ifndef DO_NOT_TIME_PACK_IMAGE_TIME
+      t6 = high_resolution_clock::now();
+      PackImageTime += duration_cast<duration<double>>(t6 - t5).count();
+#endif
       IF_DEBUG(printTensor(ImagePack, {C * (unsigned)std::ceil((float)MC / (float)BLOCK_MR), BLOCK_MR});)
 
       for (unsigned nr = 0; nr < NC; nr += BLOCK_NR) {
@@ -149,6 +174,7 @@ void yaconv(float *Image, float *Filter, float *Output, unsigned C,
 
           // Microkernel call
           blisGemmUKR(C, &Alpha, ImagePack + mr * C, FilterPack + nr * C, &One, TmpOutput, BLOCK_NR, 1, data, cntx);
+          // copyBufferToOutput(TmpOutput, Output, mc + mr, nc + nr, MR, NR);
 
           // Copy to correct output location
           // unsigned fh = (nc + nr) / M / FW, fw = (nc + nr) / M % FW;
@@ -173,8 +199,6 @@ void yaconv(float *Image, float *Filter, float *Output, unsigned C,
       }
     }
   }
-  // Times.push_back(PackFilterTime);
-  Times.push_back(PackImageTime);
 }
 
   // // Compute groups

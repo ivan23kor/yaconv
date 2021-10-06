@@ -69,7 +69,8 @@ void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
                 unsigned SH, unsigned SW) {
 
   float *InputBuf = alignedAlloc(C * KH * KW * OH * OW);
-  TIME(im2col(Input, C, H, W, KH, KW, PH, PW, SH, SW, 1, 1, InputBuf);)
+  // TIME(im2col(Input, C, H, W, KH, KW, PH, PW, SH, SW, 1, 1, InputBuf);)
+  im2col(Input, C, H, W, KH, KW, PH, PW, SH, SW, 1, 1, InputBuf);
 
   unsigned K = C * KH * KW;
   unsigned N = OH * OW;
@@ -80,8 +81,8 @@ void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
              std::cout << "1 x GEMM[" << M << " x " << K << " x " << N << "]\n";
              std::cout << std::string(80, '-') << "\n\n";)
 
-  gemm(Kernel, InputBuf, Output, M, K, N, K, N, N, 1.0, 0.0);
   // TIME(gemm(Kernel, InputBuf, Output, M, K, N, K, N, N, 1.0, 0.0);)
+  gemm(Kernel, InputBuf, Output, M, K, N, K, N, N, 1.0, 0.0);
 
   // TODO: For a fair comparison, calling custom gemm that is similar to
   // other convolution implementations. Replace with a lib call later.
