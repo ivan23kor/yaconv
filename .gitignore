@@ -1,5 +1,5 @@
 # Files copies (or symlinks) of BLIS files
-blis_config.mk
+make_defs.mk
 gemm_microkernel.c
 
 # Build files
