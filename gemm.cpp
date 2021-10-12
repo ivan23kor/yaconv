@@ -52,10 +52,6 @@ void gemm(const float *A, const float *B, float *C, unsigned M, unsigned K,
   auto *BPack = alignedAlloc(BLOCK_KC * BLOCK_NC);
   auto *CBuff = alignedAlloc(BLOCK_MR * BLOCK_NR);
 
-  // C *= Beta
-  bli_sscalm(BLIS_NO_CONJUGATE, 0, BLIS_NONUNIT_DIAG, BLIS_DENSE, M, N, &Beta,
-             C, LDC, 1);
-
   float Zero = 0.0, One = 1.0;
   for (unsigned jc = 0; jc < N; jc += BLOCK_NC) {
 
@@ -85,13 +81,12 @@ void gemm(const float *A, const float *B, float *C, unsigned M, unsigned K,
             float *Br = BPack + jr * KC;
             float *Cr = C + (ic + ir) * LDC + jc + jr;
 
+            // Cr = Beta * Cr + Alpha * Ar x Br
             if ((MR == BLOCK_MR) && (NR == BLOCK_NR))
-              blisGemmUKR(KC, &Alpha, Ar, Br, &One, Cr, LDC, 1, data, cntx);
+              bli_sgemm_ukr(KC, &Alpha, Ar, Br, &Beta_, Cr, LDC, 1, data, cntx);
             else {
-              blisGemmUKR(KC, &Alpha, Ar, Br, &Zero, CBuff, BLOCK_NR, 1, data,
-                          cntx);
-              bli_saxpym(0, BLIS_NONUNIT_DIAG, BLIS_DENSE, BLIS_NO_TRANSPOSE,
-                         MR, NR, &Alpha, CBuff, BLOCK_NR, 1, Cr, LDC, 1);
+              bli_sgemm_ukr(KC, &Alpha, Ar, Br, &Zero, CBuff, BLOCK_NR, 1, data, cntx);
+              bli_sxpbys_mxn(MR, NR, CBuff, BLOCK_NR, 1, &Beta_, Cr, LDC, 1);
             }
           }
         }
