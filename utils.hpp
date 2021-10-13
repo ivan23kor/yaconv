@@ -23,6 +23,8 @@
     expr;                                                                       \
   }
 
+void flushCache(unsigned L3SizeInBytes=134217728);
+
 // A macro to allocate page-aligned output of SIZE floats, run and time some
 // piece of code over REPEAT iterations, and to save the output and running
 // time to the code-defined vectors `Outputs` and `Times`
@@ -30,6 +32,7 @@
   Outputs.push_back(alignedAlloc(SIZE));                                       \
   TempTime = 0.0;                                                              \
   for (unsigned i = 0; i < REPEAT; ++i) {                                      \
+    flushCache();                                                              \
     t1 = high_resolution_clock::now();                                         \
     f;                                                                         \
     t2 = high_resolution_clock::now();                                         \
