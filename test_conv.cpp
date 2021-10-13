@@ -27,10 +27,10 @@ int main(int argc, char **argv) {
   const unsigned M = atoi(argv[4]);
   const unsigned FH = atoi(argv[5]);
   const unsigned FW = atoi(argv[6]);
-  const unsigned SH = atoi(argv[7]);
-  const unsigned SW = atoi(argv[8]);
-  const unsigned PH = atoi(argv[9]);
-  const unsigned PW = atoi(argv[10]);
+  const unsigned PH = atoi(argv[7]);
+  const unsigned PW = atoi(argv[8]);
+  const unsigned SH = atoi(argv[9]);
+  const unsigned SW = atoi(argv[10]);
   const unsigned Repeat = argc > 11 ? atoi(argv[11]) : 1;
 
   const unsigned OH = (H - FH + 2 * PH) / SH + 1;
