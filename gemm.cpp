@@ -7,44 +7,36 @@ namespace {
 #include "blis_params.hpp"
 }; // namespace
 
-// TODO: hopefully, the compiler is doing if-unswitching here.
-// It is ok for now as it keeps the code clean.
-// Anyway, manually unswitched packing was slower than that from BLIS so
-// packing performance optimization must be left for later
+// Helper functions for packing, hide some BLIS parameters for panel packing
+inline void packAPanel(float *APanel, float *PackPanel, unsigned MR, unsigned KC, unsigned rsa, unsigned csa, unsigned incp) {
+  bli_packA_ukr(BLIS_NO_CONJUGATE, BLIS_PACKED_ROW_PANELS, MR, KC, KC, bli_s1, APanel, rsa, csa, PackPanel, incp, cntx);
+};
 
-// Block is row-major
-void packA(const float *Block, float *&Pack, unsigned LDA, unsigned MC,
-           unsigned KC) {
-  unsigned To = 0;
-  for (unsigned ic = 0; ic < MC; ic += BLOCK_MR) {
-    unsigned MR = MIN(MC - ic, BLOCK_MR);
-    for (unsigned k = 0; k < KC; ++k) {
-      for (unsigned ir = 0; ir < MR; ++ir) {
-        unsigned From = (ic + ir) * LDA + k;
-        Pack[To++] = Block[From];
-      }
-      To += BLOCK_MR - MR;
-    }
-  }
+inline void packBPanel(float *BPanel, float *PackPanel, unsigned NR, unsigned KC, unsigned rsb, unsigned csb, unsigned incp) {
+  bli_packB_ukr(BLIS_NO_CONJUGATE, BLIS_PACKED_ROW_PANELS, NR, KC, KC, bli_s1, BPanel, rsb, csb, PackPanel, incp, cntx);
+};
+
+// A is row-major
+void packA(float *A, float *&Pack, unsigned LDA, unsigned MC, unsigned KC) {
+  unsigned ic = 0;
+  for (; ic + BLOCK_MR <= MC; ic += BLOCK_MR)
+    packAPanel(A + ic * LDA, Pack + ic * KC, BLOCK_MR, KC, LDA, 1, BLOCK_MR);
+  packAPanel(A + ic * LDA, Pack + ic * KC, MC - ic, KC, LDA, 1, BLOCK_MR);
 }
 
-// Block is row-major
-void packB(const float *Block, float *&Pack, unsigned LDB, unsigned KC,
-           unsigned NC) {
-  unsigned To = 0;
-  for (unsigned jc = 0; jc < NC; jc += BLOCK_NR) {
-    unsigned NR = MIN(NC - jc, BLOCK_NR);
-    for (unsigned k = 0; k < KC; ++k) {
-      for (unsigned jr = 0; jr < NR; ++jr) {
-        unsigned From = jc + jr + LDB * k;
-        Pack[To++] = Block[From];
-      }
-      To += BLOCK_NR - NR;
-    }
-  }
+// B is row-major
+void packB(float *B, float *&Pack, unsigned LDB, unsigned KC, unsigned NC) {
+  unsigned jc = 0;
+  for (; jc + BLOCK_NR < NC; jc += BLOCK_NR)
+    packBPanel(B + jc, Pack + jc * KC, BLOCK_NR, KC, 1, LDB, BLOCK_NR);
+  packBPanel(B + jc, Pack + jc * KC, NC - jc, KC, 1, LDB, BLOCK_NR);
 }
 
-void gemm(const float *A, const float *B, float *C, unsigned M, unsigned K,
+// TODO: As compared to BLIS, this gemm can perform +10% or -10%, depending
+// on the input matrix sizes
+// TODO: As compared to OpenBLAS, this gemm usually performs as worse
+// as BLIS does (-10%); but OpenBLAS is 2x-3x faster for skinny GEMMs (K = 3)
+void gemm(float *A, float *B, float *C, unsigned M, unsigned K,
           unsigned N, unsigned LDA, unsigned LDB, unsigned LDC, float Alpha,
           float Beta) {
 
@@ -60,6 +52,7 @@ void gemm(const float *A, const float *B, float *C, unsigned M, unsigned K,
     for (unsigned k = 0; k < K; k += BLOCK_KC) {
 
       unsigned KC = MIN(K - k, BLOCK_KC);
+      float Beta_ = k == 0 ? Beta : One;
 
       packB(B + k * LDB + jc, BPack, LDB, KC, NC);
 
