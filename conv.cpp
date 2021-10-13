@@ -245,9 +245,9 @@ auto *convGemm(const float *Input, const float *Kernel, unsigned C_, unsigned H,
             float *Cr = C + (ic + ir) * LDC + jc + jr;
 
             if ((MR == BLOCK_MR) && (NR == BLOCK_NR))
-              blisGemmUKR(KC, &Alpha, Ar, Br, &One, Cr, LDC, 1, data, cntx);
+              bli_sgemm_ukr(KC, &Alpha, Ar, Br, &One, Cr, LDC, 1, data, cntx);
             else {
-              blisGemmUKR(KC, &Alpha, Ar, Br, &Zero, CBuff, BLOCK_NR, 1, data,
+              bli_sgemm_ukr(KC, &Alpha, Ar, Br, &Zero, CBuff, BLOCK_NR, 1, data,
                           cntx);
               // TODO: scal2m can be replaced with copym for convolution.
               // Should be faster, keeping it like that to be fair with the
