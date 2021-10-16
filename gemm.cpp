@@ -23,6 +23,20 @@ void packB(float *B, float *Pack, unsigned LDB, unsigned KC, unsigned NC) {
   packBPanel(B + jc, Pack + jc * KC, NC - jc, KC, 1, LDB, BLOCK_NR);
 }
 
+static float *APack = nullptr, *BPack = nullptr, *CBuff = nullptr;
+
+void initGemmBuffers() {
+  APack = alignedAlloc(BLOCK_MC * BLOCK_KC);
+  BPack = alignedAlloc(BLOCK_KC * BLOCK_NC);
+  CBuff = alignedAlloc(BLOCK_MR * BLOCK_NR);
+};
+
+void freeGemmBuffers() {
+  free(APack);
+  free(BPack);
+  free(CBuff);
+}
+
 // TODO: As compared to BLIS, this gemm can perform +10% or -10%, depending
 // on the input matrix sizes
 // TODO: As compared to OpenBLAS, this gemm usually performs as worse
@@ -30,9 +44,7 @@ void packB(float *B, float *Pack, unsigned LDB, unsigned KC, unsigned NC) {
 void gemm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
           unsigned LDA, unsigned LDB, unsigned LDC, float Alpha, float Beta) {
 
-  auto *APack = alignedAlloc(BLOCK_MC * BLOCK_KC);
-  auto *BPack = alignedAlloc(BLOCK_KC * BLOCK_NC);
-  auto *CBuff = alignedAlloc(BLOCK_MR * BLOCK_NR);
+  initGemmBuffers();
 
   float Zero = 0.0, One = 1.0;
   for (unsigned jc = 0; jc < N; jc += BLOCK_NC) {
@@ -77,4 +89,5 @@ void gemm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
       }
     }
   }
+  freeGemmBuffers();
 }
