@@ -19,10 +19,8 @@ int main(int argc, char **argv) {
   const unsigned Repeat = argc > 4 ? atoi(argv[4]) : 1;
 
   // Gemm
-  float *A = allocateFilledTensor(M * K);
-  float *B = allocateFilledTensor(K * N);
-  // float *A = allocateRandomTensor(M * K);
-  // float *B = allocateRandomTensor(K * N);
+  float *A = allocateRandomTensor(M * K);
+  float *B = allocateRandomTensor(K * N);
   IF_DEBUG(printTensor(A, {M, K}); printTensor(B, {K, N});)
 
   // Output tensors
@@ -42,10 +40,7 @@ int main(int argc, char **argv) {
 
   // clang-format off
   // BLIS gemm
-  // RUN_GEMM(bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &Alpha, A, K, 1, B, N, 1, &Beta, Outputs.back(), N, 1))
-
-  // OpenBLAS gemm
-  // RUN_GEMM(cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, M, N, K, Alpha, A, K, B, N, Beta, Outputs.back(), N))
+  RUN_GEMM(bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &Alpha, A, K, 1, B, N, 1, &Beta, Outputs.back(), N, 1))
 
   // My gemm
   RUN_GEMM(gemm(A, B, Outputs.back(), M, K, N, K, N, N, Alpha, Beta))
