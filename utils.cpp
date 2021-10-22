@@ -116,9 +116,7 @@ void printTensor(float *Tensor, std::vector<unsigned> Sizes, std::string Pre,
 }
 
 void __attribute__((optimize("O0"))) flushCache(unsigned L3SizeInBytes) {
-  unsigned L3SizeInInts = L3SizeInBytes / sizeof(int);
-  auto *Dummy = new int[L3SizeInInts];
-  for (unsigned i = 0; i < L3SizeInInts; ++i)
-    Dummy[i] = 0;
-  delete[] Dummy;
+  unsigned L3SizeInFloats = L3SizeInBytes / sizeof(float);
+  auto *Dummy = allocateRandomTensor(L3SizeInFloats);
+  free(Dummy);
 }
