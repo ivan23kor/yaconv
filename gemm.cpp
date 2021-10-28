@@ -78,10 +78,9 @@ void gemm(float *A, float *B, float *C, int M, int K, int N,
 
             // Cr = Beta * Cr + Alpha * Ar x Br
             if ((MR == BLOCK_MR) && (NR == BLOCK_NR))
-              bli_sgemm_ukr(KC, &Alpha, Ar, Br, &Beta_, Cr, LDC, 1, data, cntx);
+              sgemm_ukr(KC, &Alpha, Ar, Br, &Beta_, Cr, LDC, 1);
             else {
-              bli_sgemm_ukr(KC, &Alpha, Ar, Br, &Zero, CBuff, BLOCK_NR, 1, data,
-                            cntx);
+              sgemm_ukr(KC, &Alpha, Ar, Br, &Zero, CBuff, BLOCK_NR, 1);
               bli_sxpbys_mxn(MR, NR, CBuff, BLOCK_NR, 1, &Beta_, Cr, LDC, 1);
             }
           }
