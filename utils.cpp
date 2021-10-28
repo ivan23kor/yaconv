@@ -63,7 +63,7 @@ void printVector(float *Vector, unsigned Len, const std::string Pre = "",
                  const std::string Post = "\n", int Setw = 3) {
   std::cout << Pre << "[";
   for (unsigned i = 0; i < Len; ++i)
-    std::cout << std::setw(Setw + 1) << Vector[i];
+    std::cout << std::setw(Setw + 1) << (Vector[i] > 0.1 ? Vector[i] : 0);
   std::cout << "]" << Post;
 }
 
@@ -81,7 +81,7 @@ void printTensor(float *Tensor, std::vector<unsigned> Sizes, std::string Pre,
       MaxNum = std::max(MaxNum, Tensor[i]);
 
     Setw = 1;
-    while ((MaxNum /= 10.) > 1.)
+    while ((MaxNum /= 10) >= 1)
       ++Setw;
   }
 
