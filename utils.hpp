@@ -3,8 +3,8 @@
 #include <string>
 #include <vector>
 
-#define MIN(a, b) a < b ? a : b
-#define MAX(a, b) a > b ? a : b
+#define MIN(a, b) (a < b ? a : b)
+#define MAX(a, b) (a > b ? a : b)
  
 // A macro to time algorithm parts
 #ifndef TIME
