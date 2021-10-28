@@ -12,7 +12,17 @@ using namespace std::chrono;
 // this vector
 std::vector<double> Times;
 
-extern double PackImageTime, PackFilterTime;
+void convertCHWToHWC(float *CHW, float *HWC, unsigned C, unsigned H, unsigned W) {
+  for (unsigned c = 0; c < C; ++c)
+    for (unsigned h = 0; h < H; ++h)
+      for (unsigned w = 0; w < W; ++w)
+        HWC[h * W * C + w * C + c] = CHW[c * H * W + h * W + w];
+}
+
+void convertMCHWToMHWC(float *MCHW, float *MHWC, unsigned M, unsigned C, unsigned H, unsigned W) {
+  for (unsigned m = 0; m < M; ++m)
+    convertCHWToHWC(MCHW + m * C * H * W, MHWC + m * H * W * C, C, H, W);
+}
 
 int main(int argc, char **argv) {
   // For now, N == 1
@@ -35,12 +45,20 @@ int main(int argc, char **argv) {
 
   const unsigned OH = (H - FH + 2 * PH) / SH + 1;
   const unsigned OW = (W - FW + 2 * PW) / SW + 1;
-  std::cout << "Output: [" << M << "] x [" << OH << " * " << OW << "]\n";
 
-  float *Input = allocateFilledTensor(C * H * W);
-  float *Filter = allocateFilledTensor(M * C * FH * FW);
-  IF_DEBUG(printTensor(Input, {C, H, W}))
-  IF_DEBUG(printTensor(Filter, {M, C, FH * FW}))
+  // Create two input tensors - NCHW and NHWC
+  auto *InputCHW = allocateFilledTensor(C * H * W);
+  auto *InputHWC = allocateFilledTensor(H * W * C);
+  convertCHWToHWC(InputCHW, InputHWC, C, H, W);
+
+  // Create two filter tensors - MCHW and MHWC
+  auto *FilterMCHW = allocateFilledTensor(M * C * FH * FW);
+  auto *FilterMHWC = allocateFilledTensor(M * FH * FW * C);
+  convertMCHWToMHWC(FilterMCHW, FilterMHWC, M, C, FH, FW);
+
+  // Print input and filter tensors in debug mode
+  IF_DEBUG(printTensor(InputCHW, {C, H, W}))
+  IF_DEBUG(printTensor(FilterMCHW, {M, C, FH * FW}))
 
   // Output tensors
   std::vector<float *> Outputs;
@@ -54,24 +72,27 @@ int main(int argc, char **argv) {
 
   // clang-format off
   // // Convolution with im2col
-  // RUN_CONV(convIm2col(Input, Filter, Outputs.back(), C, H, W, M, FH, FW, OH, OW, PH, PW, SH, SW))
+  // RUN_CONV(convIm2col(InputCHW, FilterMCHW, Outputs.back(), C, H, W, M, FH, FW, OH, OW, PH, PW, SH, SW))
 
   // Yaconv
-  RUN_CONV(yaconv(Input, Filter, Outputs.back(), C, H, W, M, FH, FW, SH, SW, PH, PW))
-
-  // // Convolution with fused im2col+packing
-  // RUN_CONV(Outputs.back() = convGemm(Input, Filter, C, H, W, M, FH, FW))
+  RUN_CONV(yaconv(InputHWC, FilterMHWC, Outputs.back(), C, H, W, M, FH, FW, SH, SW, PH, PW))
   // clang-format on
 
-  // // Print tensors for each run
-  // IF_DEBUG(for (const auto &Output
-  //                 : Outputs) printTensor(Output, {M, OH * OW});)
+  // Print tensors for each run
+  IF_DEBUG(for (const auto &Output
+                  : Outputs) printTensor(Output, {M, OH * OW});)
 
   // Print times for each run
-  for (const auto &Time : Times)
-    std::cout << Time << "\n";
-  std::cout << "PackImageTime: " << PackImageTime / Repeat << "\n";
-  std::cout << "PackFilterTime: " << PackFilterTime / Repeat << "\n";
+  // for (const auto &Time : Times)
+  //   std::cout << Time << "\n";
+  // std::cout << Im2colTime / Repeat << "," << GEMMTime / Repeat << "\n";
 
-  return 0; //tensorsEqual(Outputs, M * OH * OW) ? 0 : -1;
+  free(InputCHW);
+  free(InputHWC);
+  free(FilterMCHW);
+  free(FilterMHWC);
+  for (const auto &Output: Outputs)
+    free(Output);
+  return 0;
+  return tensorsEqual(Outputs, M * OH * OW) ? 0 : -1;
 }
