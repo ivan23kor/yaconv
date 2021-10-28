@@ -19,13 +19,15 @@ void fillTensor(float *&Tensor, unsigned Size, float Value) {
 }
 
 float *allocateFilledTensor(unsigned Size, float Value, int Alignment) {
-  auto *Tensor = Alignment > 0 ? alignedAlloc(Size) : new float[Size];
+  Alignment = Alignment > 0 ? Alignment : sizeof(void *);
+  auto *Tensor = alignedAlloc(Size, Alignment);
   fillTensor(Tensor, Size, Value);
   return Tensor;
 }
 
 float *allocateRandomTensor(unsigned Size, unsigned MaxVal, int Alignment) {
-  auto *Tensor = Alignment > 0 ? alignedAlloc(Size) : new float[Size];
+  Alignment = Alignment > 0 ? Alignment : sizeof(void *);
+  auto *Tensor = alignedAlloc(Size, Alignment);
   randomizeTensor(Tensor, Size, MaxVal);
   return Tensor;
 }
