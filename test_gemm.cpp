@@ -13,10 +13,10 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  const unsigned M = atoi(argv[1]);
-  const unsigned K = atoi(argv[2]);
-  const unsigned N = atoi(argv[3]);
-  const unsigned Repeat = argc > 4 ? atoi(argv[4]) : 1;
+  const int M = atoi(argv[1]);
+  const int K = atoi(argv[2]);
+  const int N = atoi(argv[3]);
+  const int Repeat = argc > 4 ? atoi(argv[4]) : 1;
 
   // Gemm
   float *A = allocateRandomTensor(M * K);

@@ -12,15 +12,15 @@ using namespace std::chrono;
 // this vector
 std::vector<double> Times;
 
-void convertCHWToHWC(float *CHW, float *HWC, unsigned C, unsigned H, unsigned W) {
-  for (unsigned c = 0; c < C; ++c)
-    for (unsigned h = 0; h < H; ++h)
-      for (unsigned w = 0; w < W; ++w)
+void convertCHWToHWC(float *CHW, float *HWC, int C, int H, int W) {
+  for (int c = 0; c < C; ++c)
+    for (int h = 0; h < H; ++h)
+      for (int w = 0; w < W; ++w)
         HWC[h * W * C + w * C + c] = CHW[c * H * W + h * W + w];
 }
 
-void convertMCHWToMHWC(float *MCHW, float *MHWC, unsigned M, unsigned C, unsigned H, unsigned W) {
-  for (unsigned m = 0; m < M; ++m)
+void convertMCHWToMHWC(float *MCHW, float *MHWC, int M, int C, int H, int W) {
+  for (int m = 0; m < M; ++m)
     convertCHWToHWC(MCHW + m * C * H * W, MHWC + m * H * W * C, C, H, W);
 }
 
@@ -31,20 +31,20 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  const unsigned C = atoi(argv[1]);
-  const unsigned H = atoi(argv[2]);
-  const unsigned W = atoi(argv[3]);
-  const unsigned M = atoi(argv[4]);
-  const unsigned FH = atoi(argv[5]);
-  const unsigned FW = atoi(argv[6]);
-  const unsigned PH = atoi(argv[7]);
-  const unsigned PW = atoi(argv[8]);
-  const unsigned SH = atoi(argv[9]);
-  const unsigned SW = atoi(argv[10]);
-  const unsigned Repeat = argc > 11 ? atoi(argv[11]) : 1;
+  const int C = atoi(argv[1]);
+  const int H = atoi(argv[2]);
+  const int W = atoi(argv[3]);
+  const int M = atoi(argv[4]);
+  const int FH = atoi(argv[5]);
+  const int FW = atoi(argv[6]);
+  const int PH = atoi(argv[7]);
+  const int PW = atoi(argv[8]);
+  const int SH = atoi(argv[9]);
+  const int SW = atoi(argv[10]);
+  const int Repeat = argc > 11 ? atoi(argv[11]) : 1;
 
-  const unsigned OH = (H - FH + 2 * PH) / SH + 1;
-  const unsigned OW = (W - FW + 2 * PW) / SW + 1;
+  const int OH = (H - FH + 2 * PH) / SH + 1;
+  const int OW = (W - FW + 2 * PW) / SW + 1;
 
   // Create two input tensors - NCHW and NHWC
   auto *InputCHW = allocateFilledTensor(C * H * W);

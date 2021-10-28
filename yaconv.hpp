@@ -1,5 +1,5 @@
 #pragma once
 
-void yaconv(float *Image, float *Filter, float *Output, unsigned C,
-            unsigned H, unsigned W, unsigned M, unsigned KH, unsigned FW,
-            unsigned SH, unsigned SW, unsigned PH, unsigned PW);
+void yaconv(float *Image, float *Filter, float *Output, int C,
+            int H, int W, int M, int KH, int FW,
+            int SH, int SW, int PH, int PW);

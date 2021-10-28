@@ -8,16 +8,16 @@ namespace {
 }; // namespace
 
 // A is row-major
-void packA(float *A, float *Pack, unsigned LDA, unsigned MC, unsigned KC) {
-  unsigned ic = 0;
+void packA(float *A, float *Pack, int LDA, int MC, int KC) {
+  int ic = 0;
   for (; ic + BLOCK_MR <= MC; ic += BLOCK_MR)
     packAPanel(A + ic * LDA, Pack + ic * KC, BLOCK_MR, KC, LDA, 1, BLOCK_MR);
   packAPanel(A + ic * LDA, Pack + ic * KC, MC - ic, KC, LDA, 1, BLOCK_MR);
 }
 
 // B is row-major
-void packB(float *B, float *Pack, unsigned LDB, unsigned KC, unsigned NC) {
-  unsigned jc = 0;
+void packB(float *B, float *Pack, int LDB, int KC, int NC) {
+  int jc = 0;
   for (; jc + BLOCK_NR < NC; jc += BLOCK_NR)
     packBPanel(B + jc, Pack + jc * KC, BLOCK_NR, KC, 1, LDB, BLOCK_NR);
   packBPanel(B + jc, Pack + jc * KC, NC - jc, KC, 1, LDB, BLOCK_NR);
@@ -41,36 +41,36 @@ void freeGemmBuffers() {
 // on the input matrix sizes
 // TODO: As compared to OpenBLAS, this gemm usually performs as worse
 // as BLIS does (-10%); but OpenBLAS is 2x-3x faster for skinny GEMMs (K = 3)
-void gemm(float *A, float *B, float *C, unsigned M, unsigned K, unsigned N,
-          unsigned LDA, unsigned LDB, unsigned LDC, float Alpha, float Beta) {
+void gemm(float *A, float *B, float *C, int M, int K, int N,
+          int LDA, int LDB, int LDC, float Alpha, float Beta) {
 
   initGemmBuffers();
 
   float Zero = 0.0, One = 1.0;
-  for (unsigned jc = 0; jc < N; jc += BLOCK_NC) {
+  for (int jc = 0; jc < N; jc += BLOCK_NC) {
 
-    unsigned NC = MIN(N - jc, BLOCK_NC);
+    int NC = MIN(N - jc, BLOCK_NC);
 
-    for (unsigned k = 0; k < K; k += BLOCK_KC) {
+    for (int k = 0; k < K; k += BLOCK_KC) {
 
-      unsigned KC = MIN(K - k, BLOCK_KC);
+      int KC = MIN(K - k, BLOCK_KC);
       float Beta_ = k == 0 ? Beta : One;
 
       packB(B + k * LDB + jc, BPack, LDB, KC, NC);
 
-      for (unsigned ic = 0; ic < M; ic += BLOCK_MC) {
+      for (int ic = 0; ic < M; ic += BLOCK_MC) {
 
-        unsigned MC = MIN(M - ic, BLOCK_MC);
+        int MC = MIN(M - ic, BLOCK_MC);
 
         packA(A + ic * LDA + k, APack, LDA, MC, KC);
 
-        for (unsigned jr = 0; jr < NC; jr += BLOCK_NR) {
+        for (int jr = 0; jr < NC; jr += BLOCK_NR) {
 
-          unsigned NR = MIN(NC - jr, BLOCK_NR);
+          int NR = MIN(NC - jr, BLOCK_NR);
 
-          for (unsigned ir = 0; ir < MC; ir += BLOCK_MR) {
+          for (int ir = 0; ir < MC; ir += BLOCK_MR) {
 
-            unsigned MR = MIN(MC - ir, BLOCK_MR);
+            int MR = MIN(MC - ir, BLOCK_MR);
 
             float *Ar = APack + ir * KC;
             float *Br = BPack + jr * KC;

@@ -3,46 +3,46 @@
 #include <iomanip>
 #include <iostream>
 
-float *alignedAlloc(unsigned Size, int Alignment) {
+float *alignedAlloc(int Size, int Alignment) {
   return (float *)aligned_alloc(Alignment, Size * sizeof(float));
 }
 
-void randomizeTensor(float *&Tensor, unsigned Size, unsigned MaxVal) {
+void randomizeTensor(float *&Tensor, int Size, int MaxVal) {
   srand(time(nullptr));
-  for (unsigned i = 0; i < Size; ++i)
+  for (int i = 0; i < Size; ++i)
     Tensor[i] = rand() % MaxVal;
 }
 
-void fillTensor(float *&Tensor, unsigned Size, float Value) {
-  for (unsigned i = 0; i < Size; ++i)
+void fillTensor(float *&Tensor, int Size, float Value) {
+  for (int i = 0; i < Size; ++i)
     Tensor[i] = Value < 0. ? i + 1 : Value;
 }
 
-float *allocateFilledTensor(unsigned Size, float Value, int Alignment) {
+float *allocateFilledTensor(int Size, float Value, int Alignment) {
   Alignment = Alignment > 0 ? Alignment : sizeof(void *);
   auto *Tensor = alignedAlloc(Size, Alignment);
   fillTensor(Tensor, Size, Value);
   return Tensor;
 }
 
-float *allocateRandomTensor(unsigned Size, unsigned MaxVal, int Alignment) {
+float *allocateRandomTensor(int Size, int MaxVal, int Alignment) {
   Alignment = Alignment > 0 ? Alignment : sizeof(void *);
   auto *Tensor = alignedAlloc(Size, Alignment);
   randomizeTensor(Tensor, Size, MaxVal);
   return Tensor;
 }
 
-bool tensorsEqual(std::vector<float *> Tensors, const unsigned Size,
+bool tensorsEqual(std::vector<float *> Tensors, const int Size,
                   const float Epsilon) {
-  unsigned N = Tensors.size();
+  int N = Tensors.size();
   if (N < 2)
     return true;
 
   float *TRef = Tensors[0];
-  unsigned Count = 0;
-  for (unsigned n = 1; n < N; ++n) {
+  int Count = 0;
+  for (int n = 1; n < N; ++n) {
     float *T = Tensors[n];
-    for (unsigned i = 0; i < Size; ++i) {
+    for (int i = 0; i < Size; ++i) {
       float rel_diff = std::abs((TRef[i] - T[i]) / TRef[i]);
       if (rel_diff > Epsilon) {
         std::cerr << "[" << i << "] " << rel_diff << " |" << TRef[i] << " - "
@@ -59,25 +59,25 @@ bool tensorsEqual(std::vector<float *> Tensors, const unsigned Size,
   return Count == 0;
 }
 
-void printVector(float *Vector, unsigned Len, const std::string Pre = "",
+void printVector(float *Vector, int Len, const std::string Pre = "",
                  const std::string Post = "\n", int Setw = 3) {
   std::cout << Pre << "[";
-  for (unsigned i = 0; i < Len; ++i)
+  for (int i = 0; i < Len; ++i)
     std::cout << std::setw(Setw + 1) << (Vector[i] > 0.1 ? Vector[i] : 0);
   std::cout << "]" << Post;
 }
 
-void printTensor(float *Tensor, std::vector<unsigned> Sizes, std::string Pre,
+void printTensor(float *Tensor, std::vector<int> Sizes, std::string Pre,
                  const std::string Post, bool First, int Setw) {
 
   // This block only serves to determine setw width
   if (Setw == -1) {
-    unsigned Size = 1;
+    int Size = 1;
     for (const auto &s : Sizes)
       Size *= s;
 
     float MaxNum = 0.;
-    for (unsigned i = 0; i < Size; ++i)
+    for (int i = 0; i < Size; ++i)
       MaxNum = std::max(MaxNum, Tensor[i]);
 
     Setw = 1;
@@ -94,7 +94,7 @@ void printTensor(float *Tensor, std::vector<unsigned> Sizes, std::string Pre,
 
   std::cout << FirstPre << "[";
 
-  std::vector<unsigned> NewSizes(++Sizes.begin(), Sizes.end());
+  std::vector<int> NewSizes(++Sizes.begin(), Sizes.end());
   if (Sizes[0] <= 1) {
     printTensor(Tensor, NewSizes, Pre, "]" + Post, true, Setw);
     return;
@@ -105,7 +105,7 @@ void printTensor(float *Tensor, std::vector<unsigned> Sizes, std::string Pre,
   const std::string Newlines = std::string(NewSizes.size() - 1, '\n');
   std::cout << Newlines;
 
-  unsigned Stride = 1;
+  int Stride = 1;
   for (const auto &s : NewSizes)
     Stride *= s;
 
@@ -117,8 +117,8 @@ void printTensor(float *Tensor, std::vector<unsigned> Sizes, std::string Pre,
   printTensor(Tensor, NewSizes, Pre, "]" + Post, false, Setw);
 }
 
-void __attribute__((optimize("O0"))) flushCache(unsigned L3SizeInBytes) {
-  unsigned L3SizeInFloats = L3SizeInBytes / sizeof(float);
+void __attribute__((optimize("O0"))) flushCache(int L3SizeInBytes) {
+  int L3SizeInFloats = L3SizeInBytes / sizeof(float);
   auto *Dummy = allocateRandomTensor(L3SizeInFloats);
   free(Dummy);
 }

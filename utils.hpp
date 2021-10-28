@@ -23,7 +23,7 @@
     expr;                                                                       \
   }
 
-void flushCache(unsigned L3SizeInBytes=134217728);
+void flushCache(int L3SizeInBytes=134217728);
 
 // A macro to allocate page-aligned output of SIZE floats, run and time some
 // piece of code over REPEAT iterations, and to save the output and running
@@ -31,7 +31,7 @@ void flushCache(unsigned L3SizeInBytes=134217728);
 #define RUN(SIZE, f, REPEAT)                                                   \
   Outputs.push_back(alignedAlloc(SIZE));                                       \
   TempTime = 0.0;                                                              \
-  for (unsigned i = 0; i < REPEAT; ++i) {                                      \
+  for (int i = 0; i < REPEAT; ++i) {                                      \
     flushCache();                                                              \
     t1 = high_resolution_clock::now();                                         \
     f;                                                                         \
@@ -40,19 +40,19 @@ void flushCache(unsigned L3SizeInBytes=134217728);
   }                                                                            \
   Times.push_back(TempTime / Repeat);
 
-float *alignedAlloc(unsigned Size, int Alignment = 4096);
+float *alignedAlloc(int Size, int Alignment = 4096);
 
-void randomizeTensor(float *&Tensor, unsigned Size, unsigned MaxVal = 256);
+void randomizeTensor(float *&Tensor, int Size, int MaxVal = 256);
 
-void fillTensor(float *&Tensor, unsigned Size, float Value = -1.);
+void fillTensor(float *&Tensor, int Size, float Value = -1.);
 
-float *allocateFilledTensor(unsigned Size, float Value = -1., int Alignment = -1);
+float *allocateFilledTensor(int Size, float Value = -1., int Alignment = -1);
 
-float *allocateRandomTensor(unsigned Size, unsigned MaxVal = 256, int Alignment = -1);
+float *allocateRandomTensor(int Size, int MaxVal = 256, int Alignment = -1);
 
-bool tensorsEqual(std::vector<float *>, const unsigned Size,
+bool tensorsEqual(std::vector<float *>, const int Size,
                   const float Epsilon = 1e-6);
 
-void printTensor(float *Tensor, std::vector<unsigned> Sizes,
+void printTensor(float *Tensor, std::vector<int> Sizes,
                  std::string Pre = "", const std::string Post = "\n",
                  bool First = true, int Setw = -1);

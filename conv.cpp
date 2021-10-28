@@ -58,17 +58,17 @@ void im2col(const float *data_im, const int channels, const int height,
   }
 }
 
-void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
-                unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW,
-                unsigned OH, unsigned OW, unsigned PH, unsigned PW,
-                unsigned SH, unsigned SW) {
+void convIm2col(const float *Input, float *Kernel, float *Output, int C,
+                int H, int W, int M, int KH, int KW,
+                int OH, int OW, int PH, int PW,
+                int SH, int SW) {
 
   float *InputBuf = alignedAlloc(C * KH * KW * OH * OW);
   // TIME(im2col(Input, C, H, W, KH, KW, PH, PW, SH, SW, 1, 1, InputBuf);)
   im2col(Input, C, H, W, KH, KW, PH, PW, SH, SW, 1, 1, InputBuf);
 
-  unsigned K = C * KH * KW;
-  unsigned N = OH * OW;
+  int K = C * KH * KW;
+  int N = OH * OW;
 
   IF_DEBUG(std::cout << "=== Im2col ===\n";
              std::cout << "InputBuf: " << C * KH * KW << " x " << OH * OW
@@ -81,12 +81,12 @@ void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
 
   // TODO: For a fair comparison, calling custom gemm that is similar to
   // other convolution implementations. Replace with a lib call later.
-  // unsigned rsa = K;
-  // unsigned csa = 1;
-  // unsigned rsb = N;
-  // unsigned csb = 1;
-  // unsigned rsc = N;
-  // unsigned csc = 1;
+  // int rsa = K;
+  // int csa = 1;
+  // int rsb = N;
+  // int csb = 1;
+  // int rsc = N;
+  // int csc = 1;
   // float alpha = 1.0, beta = 0.0;
   // bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &alpha, Kernel,
   //           rsa, csa, InputBuf, rsb, csb, &beta, Output, rsc, csc);

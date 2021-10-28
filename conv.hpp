@@ -8,10 +8,10 @@ void im2col(const float *data_im, const int channels, const int height,
             const int stride_w, const int dilation_h, const int dilation_w,
             float *data_col);
 
-void convIm2col(const float *Input, float *Kernel, float *Output, unsigned C,
-                unsigned H, unsigned W, unsigned M, unsigned KH, unsigned KW,
-                unsigned OH, unsigned OW, unsigned PH, unsigned PW,
-                unsigned SH, unsigned SW);
+void convIm2col(const float *Input, float *Kernel, float *Output, int C,
+                int H, int W, int M, int KH, int KW,
+                int OH, int OW, int PH, int PW,
+                int SH, int SW);
 
-float *convGemm(const float *Input, const float *Kernel, unsigned C, unsigned H,
-                unsigned W, unsigned M, unsigned KH, unsigned KW);
+float *convGemm(const float *Input, const float *Kernel, int C, int H,
+                int W, int M, int KH, int KW);
