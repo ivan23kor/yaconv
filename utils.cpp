@@ -32,7 +32,7 @@ float *allocateRandomTensor(int Size, int MaxVal, int Alignment) {
   return Tensor;
 }
 
-bool tensorsEqual(std::vector<float *> Tensors, const int Size,
+bool tensorsEqual(std::vector<float *> Tensors, const int Size, bool Show,
                   const float Epsilon) {
   int N = Tensors.size();
   if (N < 2)
@@ -45,8 +45,8 @@ bool tensorsEqual(std::vector<float *> Tensors, const int Size,
     for (int i = 0; i < Size; ++i) {
       float rel_diff = std::abs((TRef[i] - T[i]) / TRef[i]);
       if (rel_diff > Epsilon) {
-        std::cerr << "[" << i << "] " << rel_diff << " |" << TRef[i] << " - "
-                  << T[i] << "|\n";
+        if (Show)
+          std::cerr << "[" << i << "] " << rel_diff << " |" << TRef[i] << " - " << T[i] << "|\n";
         ++Count;
       }
     }
