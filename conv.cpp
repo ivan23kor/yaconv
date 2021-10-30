@@ -1,18 +1,7 @@
 #include "gemm.hpp"   // custom gemm
 #include "utils.hpp"  // Tensor aligned allocation and printing
-#include <chrono>     // Timing
 #include <iostream>   // debug printing
 
-using namespace std::chrono;
-static high_resolution_clock::time_point t1, t2;
-
-// Defined in test_conv.cpp (driver code for convolutions)
-// Algorithms in this file will append times to this vector
-extern std::vector<double> Times;
-
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//+++ Im2col +++
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 // The following two functions are taken from
 // https://github.com/BVLC/caffe/blob/master/src/caffe/util/im2col.cpp
 inline bool is_a_ge_zero_and_a_lt_b(int a, int b) {
@@ -64,23 +53,16 @@ void convIm2col(const float *Input, float *Kernel, float *Output, int C,
                 int SH, int SW) {
 
   float *InputBuf = alignedAlloc(C * KH * KW * OH * OW);
-  // TIME(im2col(Input, C, H, W, KH, KW, PH, PW, SH, SW, 1, 1, InputBuf);)
   im2col(Input, C, H, W, KH, KW, PH, PW, SH, SW, 1, 1, InputBuf);
 
   int K = C * KH * KW;
   int N = OH * OW;
 
-  IF_DEBUG(std::cout << "=== Im2col ===\n";
-             std::cout << "InputBuf: " << C * KH * KW << " x " << OH * OW
-                       << "\n";
-             std::cout << "1 x GEMM[" << M << " x " << K << " x " << N << "]\n";
-             std::cout << std::string(80, '-') << "\n\n";)
+  // std::cout << "im2col buffer: " << C * KH * KW << " x " << OH * OW << "\n";
+  // std::cout << "im2col GEMM: " << M << " x " << K << " x " << N << "\n";
 
-  // TIME(gemm(Kernel, InputBuf, Output, M, K, N, K, N, N, 1.0, 0.0);)
   gemm(Kernel, InputBuf, Output, M, K, N, K, N, N, 1.0, 0.0);
 
-  // TODO: For a fair comparison, calling custom gemm that is similar to
-  // other convolution implementations. Replace with a lib call later.
   // int rsa = K;
   // int csa = 1;
   // int rsb = N;
@@ -93,4 +75,3 @@ void convIm2col(const float *Input, float *Kernel, float *Output, int C,
 
   delete[] InputBuf;
 }
-//---------------------------------------------------------------------------

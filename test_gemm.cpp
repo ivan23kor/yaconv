@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
   // Gemm
   float *A = allocateRandomTensor(M * K);
   float *B = allocateRandomTensor(K * N);
-  IF_DEBUG(printTensor(A, {M, K}); printTensor(B, {K, N});)
+  // printTensor(A, {M, K}); printTensor(B, {K, N});
 
   // Output tensors
   std::vector<float *> Outputs;
@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
   // clang-format on
 
   // Print tensors for each run
-  IF_DEBUG(for (const auto &Output : Outputs) printTensor(Output, {M, N});)
+  // for (const auto &Output : Outputs) printTensor(Output, {M, N});
 
   // Print time for each run
   for (const auto &Time : Times)

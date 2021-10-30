@@ -56,9 +56,11 @@ int main(int argc, char **argv) {
   auto *FilterMHWC = allocateFilledTensor(M * FH * FW * C);
   convertMCHWToMHWC(FilterMCHW, FilterMHWC, M, C, FH, FW);
 
-  // Print input and filter tensors in debug mode
-  IF_DEBUG(printTensor(InputCHW, {C, H, W}))
-  IF_DEBUG(printTensor(FilterMCHW, {M, C, FH * FW}))
+  // Print Input and Filter tensors
+  // printTensor(InputCHW, {C, H, W});
+  // printTensor(InputHWC, {H, W, C});
+  // printTensor(FilterMCHW, {M, C, FH, FW});
+  // printTensor(FilterMHWC, {M, FH, FW, C});
 
   // Output tensors
   std::vector<float *> Outputs;
@@ -79,8 +81,8 @@ int main(int argc, char **argv) {
   // clang-format on
 
   // Print tensors for each run
-  IF_DEBUG(for (const auto &Output
-                  : Outputs) printTensor(Output, {M, OH * OW});)
+  // for (const auto &Output: Outputs)
+  //   printTensor(Output, {OH * OW, M});
 
   // Print times for each run
   // for (const auto &Time : Times)
