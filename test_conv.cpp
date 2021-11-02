@@ -7,10 +7,7 @@
 #include <iostream>
 
 using namespace std::chrono;
-
-// This is to allow convolution algorithms to add their timed portions to
-// this vector
-std::vector<double> Times;
+extern double YaConvPack1, YaConvPack2, YaConvComp;
 
 void convertCHWToHWC(float *CHW, float *HWC, int C, int H, int W) {
   for (int c = 0; c < C; ++c)
@@ -22,6 +19,16 @@ void convertCHWToHWC(float *CHW, float *HWC, int C, int H, int W) {
 void convertMCHWToMHWC(float *MCHW, float *MHWC, int M, int C, int H, int W) {
   for (int m = 0; m < M; ++m)
     convertCHWToHWC(MCHW + m * C * H * W, MHWC + m * H * W * C, C, H, W);
+}
+
+float *yaconvExtraOutput(int H, int W, int FH, int FW, int PW, int OW, int M) {
+  int WholeH = H % 6 == 0 ? H : H + 6 - H % 6;
+  int ExtraBefore = ((FH - 1) * OW + PW) * M;
+  int OutputAndAfter = WholeH * OW * M + (W + PW - FW + 1) * M;
+  // std::cout << ExtraBefore << " before and " << OutputAndAfter << " for output and after\n";
+
+  auto *Ret = alignedAlloc(ExtraBefore + OutputAndAfter);
+  return Ret + ExtraBefore;
 }
 
 int main(int argc, char **argv) {
@@ -67,6 +74,7 @@ int main(int argc, char **argv) {
 
   // Time variables
   high_resolution_clock::time_point t1, t2;
+  std::vector<double> Times;
   double TempTime;
 
 #define RUN(f)                                                                 \
@@ -84,7 +92,17 @@ int main(int argc, char **argv) {
 
   // clang-format off
   // Yaconv
-  RUN_CONV(yaconv(InputHWC, FilterMHWC, Outputs.back(), C, H, W, M, FH, FW, SH, SW, PH, PW))
+  Outputs.push_back(yaconvExtraOutput(H, W, FW, FW, PW, OW, M));
+  RUN(yaconv(InputHWC, FilterMHWC, Outputs.back(), C, H, W, M, FH, FW, PH, PW, SH, SW))
+  std::cout << YaConvPack1 / Repeat << "\n";
+  std::cout << YaConvPack2 / Repeat << "\n";
+  std::cout << YaConvComp / Repeat << "\n";
+
+  // Convolution with im2col
+  auto *im2colOutputMHW = allocateFilledTensor(M * OH * OW);
+  RUN(convIm2col(InputCHW, FilterMCHW, im2colOutputMHW, C, H, W, M, FH, FW, OH, OW, PH, PW, SH, SW))
+  Outputs.push_back(alignedAlloc(OH * OW * M));
+  convertCHWToHWC(im2colOutputMHW, Outputs[1], M, OH, OW);
   // clang-format on
 
   // Print tensors for each run
@@ -92,16 +110,21 @@ int main(int argc, char **argv) {
   //   printTensor(Output, {OH * OW, M});
 
   // Print times for each run
-  // for (const auto &Time : Times)
-  //   std::cout << Time << "\n";
+  for (const auto &Time : Times)
+    std::cout << Time << "\n";
+  for (const auto &Time : Times)
+    std::cout << 2 * M * C / 1000 * FH * FW * OH / 1000 * OW / Time / 1000 << "\n";
   // std::cout << Im2colTime / Repeat << "," << GEMMTime / Repeat << "\n";
 
+  int Ret = tensorsEqual(Outputs, M * OH * OW) ? 0 : -1;
+
+  // Free tensor memory
   free(InputCHW);
   free(InputHWC);
   free(FilterMCHW);
   free(FilterMHWC);
-  for (const auto &Output: Outputs)
-    free(Output);
-  return 0;
-  return tensorsEqual(Outputs, M * OH * OW) ? 0 : -1;
+  free(im2colOutputMHW);
+  // for (const auto &Output: Outputs)
+  //   free(Output);
+  return Ret;
 }
