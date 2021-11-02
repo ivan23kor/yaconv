@@ -35,15 +35,24 @@ int main(int argc, char **argv) {
   double TempTime;
   std::vector<double> Times;
 
-#define RUN_GEMM(f) \
-  RUN(M * N, f, Repeat)
+#define RUN(f)                                                                 \
+  Outputs.push_back(alignedAlloc(M * N));                                      \
+  TempTime = 0.0;                                                              \
+  for (int i = 0; i < Repeat; ++i) {                                           \
+    flushCache();                                                              \
+    t1 = high_resolution_clock::now();                                         \
+    f;                                                                         \
+    t2 = high_resolution_clock::now();                                         \
+    TempTime += duration_cast<duration<double>>(t2 - t1).count();              \
+  }                                                                            \
+  Times.push_back(TempTime / Repeat);
 
   // clang-format off
   // BLIS gemm
-  RUN_GEMM(bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &Alpha, A, K, 1, B, N, 1, &Beta, Outputs.back(), N, 1))
+  RUN(bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &Alpha, A, K, 1, B, N, 1, &Beta, Outputs.back(), N, 1))
 
   // My gemm
-  RUN_GEMM(gemm(A, B, Outputs.back(), M, K, N, K, N, N, Alpha, Beta))
+  RUN(gemm(A, B, Outputs.back(), M, K, N, K, N, N, Alpha, Beta))
   // clang-format on
 
   // Print tensors for each run

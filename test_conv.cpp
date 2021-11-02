@@ -69,13 +69,20 @@ int main(int argc, char **argv) {
   high_resolution_clock::time_point t1, t2;
   double TempTime;
 
-#define RUN_CONV(f) \
-  RUN(M * OH * OW, f, Repeat)
+#define RUN(f)                                                                 \
+  f;                                                                           \
+  YaConvPack1 = YaConvPack2 = YaConvComp = 0.0;                                \
+  TempTime = 0.0;                                                              \
+  for (int i = 0; i < Repeat; ++i) {                                           \
+    flushCache();                                                              \
+    t1 = high_resolution_clock::now();                                         \
+    f;                                                                         \
+    t2 = high_resolution_clock::now();                                         \
+    TempTime += duration_cast<duration<double>>(t2 - t1).count();              \
+  }                                                                            \
+  Times.push_back(TempTime / Repeat);
 
   // clang-format off
-  // // Convolution with im2col
-  // RUN_CONV(convIm2col(InputCHW, FilterMCHW, Outputs.back(), C, H, W, M, FH, FW, OH, OW, PH, PW, SH, SW))
-
   // Yaconv
   RUN_CONV(yaconv(InputHWC, FilterMHWC, Outputs.back(), C, H, W, M, FH, FW, SH, SW, PH, PW))
   // clang-format on
