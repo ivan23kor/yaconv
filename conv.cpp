@@ -1,3 +1,5 @@
+#include "blis.h"     // OpenBLAS gemm
+#include "cblas.h"    // OpenBLAS gemm
 #include "gemm.hpp"   // custom gemm
 #include "utils.hpp"  // Tensor aligned allocation and printing
 #include <iostream>   // debug printing
@@ -61,17 +63,22 @@ void convIm2col(const float *Input, float *Kernel, float *Output, int C,
   // std::cout << "im2col buffer: " << C * KH * KW << " x " << OH * OW << "\n";
   // std::cout << "im2col GEMM: " << M << " x " << K << " x " << N << "\n";
 
-  gemm(Kernel, InputBuf, Output, M, K, N, K, N, N, 1.0, 0.0);
+  // OpenBLAS GEMM
+  // cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, M, N, K, 1.0, Kernel, K, InputBuf, N, 0.0, Output, N);
 
-  // int rsa = K;
-  // int csa = 1;
-  // int rsb = N;
-  // int csb = 1;
-  // int rsc = N;
-  // int csc = 1;
-  // float alpha = 1.0, beta = 0.0;
-  // bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &alpha, Kernel,
-  //           rsa, csa, InputBuf, rsb, csb, &beta, Output, rsc, csc);
+  // Custom GEMM
+  // gemm(Kernel, InputBuf, Output, M, K, N, K, N, N, 1.0, 0.0);
+
+  // BLIS GEMM
+  int rsa = K;
+  int csa = 1;
+  int rsb = N;
+  int csb = 1;
+  int rsc = N;
+  int csc = 1;
+  float alpha = 1.0, beta = 0.0;
+  bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &alpha, Kernel,
+            rsa, csa, InputBuf, rsb, csb, &beta, Output, rsc, csc);
 
   delete[] InputBuf;
 }
