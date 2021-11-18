@@ -18,8 +18,7 @@ float *allocateFilledTensor(int Size, float Value = -1., int Alignment = -1);
 
 float *allocateRandomTensor(int Size, int MaxVal = 256, int Alignment = -1);
 
-bool tensorsEqual(std::vector<float *>, const int Size, bool Show = false,
-                  const float Epsilon = 1e-6);
+float maxTensorDiff(std::vector<float *> Tensors, const int Size);
 
 void printTensor(float *Tensor, std::vector<int> Sizes,
                  std::string Pre = "", const std::string Post = "\n",

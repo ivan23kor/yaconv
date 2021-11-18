@@ -32,31 +32,19 @@ float *allocateRandomTensor(int Size, int MaxVal, int Alignment) {
   return Tensor;
 }
 
-bool tensorsEqual(std::vector<float *> Tensors, const int Size, bool Show,
-                  const float Epsilon) {
+float maxTensorDiff(std::vector<float *> Tensors, const int Size) {
   int N = Tensors.size();
   if (N < 2)
-    return true;
+    return 0.0;
 
   float *TRef = Tensors[0];
-  int Count = 0;
+  float MaxDiff = 0.0;
   for (int n = 1; n < N; ++n) {
     float *T = Tensors[n];
-    for (int i = 0; i < Size; ++i) {
-      float rel_diff = std::abs((TRef[i] - T[i]) / TRef[i]);
-      if (rel_diff > Epsilon) {
-        if (Show)
-          std::cerr << "[" << i << "] " << rel_diff << " |" << TRef[i] << " - " << T[i] << "|\n";
-        ++Count;
-      }
-    }
-    if (Count > 0) {
-      std::cout << Count << " values differ in Tensor[" << n << "].\n";
-      break;
-    }
+    for (int i = 0; i < Size; ++i)
+      MaxDiff = MAX(MaxDiff, std::abs((TRef[i] - T[i]) / TRef[i]));
   }
-
-  return Count == 0;
+  return MaxDiff;
 }
 
 void printVector(float *Vector, int Len, const std::string Pre = "",
