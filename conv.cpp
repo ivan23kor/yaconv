@@ -1,5 +1,4 @@
-#include "blis.h"     // OpenBLAS gemm
-#include "cblas.h"    // OpenBLAS gemm
+#include "blis.h"     // BLAS gemm
 #include "gemm.hpp"   // custom gemm
 #include "utils.hpp"  // Tensor aligned allocation and printing
 #include <iostream>   // debug printing
@@ -62,9 +61,6 @@ void convIm2col(const float *Input, float *Kernel, float *Output, int C,
 
   // std::cout << "im2col buffer: " << C * KH * KW << " x " << OH * OW << "\n";
   // std::cout << "im2col GEMM: " << M << " x " << K << " x " << N << "\n";
-
-  // OpenBLAS GEMM
-  // cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, M, N, K, 1.0, Kernel, K, InputBuf, N, 0.0, Output, N);
 
   // Custom GEMM
   // gemm(Kernel, InputBuf, Output, M, K, N, K, N, N, 1.0, 0.0);

@@ -1,7 +1,6 @@
 #include "gemm.hpp"
 #include "utils.hpp"
 #include <blis.h>
-#include <cblas.h>
 #include <chrono>
 #include <iostream>
 
