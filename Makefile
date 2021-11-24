@@ -4,10 +4,8 @@ CC_VENDOR := $(CC)
 
 include make_defs.mk # blis/config/ARCH/make_defs.mk
 
-FLAGS := $(CKOPTFLAGS) $(CKVECFLAGS)
-
-DEBUG ?= 0
-DEBUG_FLAGS := -DDEBUG=$(DEBUG)
+FLAGS := -std=c++11
+FLAGS += $(CKOPTFLAGS) $(CKVECFLAGS)
 
 BLIS := -lblis
 BLAS := -lblas
