@@ -1,7 +1,6 @@
-CC := gcc
 CXX := g++
-CC_VENDOR := $(CC)
 
+include config.mk # blis/config.mk
 include make_defs.mk # blis/config/ARCH/make_defs.mk
 
 FLAGS := -std=c++11

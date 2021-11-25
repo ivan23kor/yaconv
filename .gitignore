@@ -1,6 +1,6 @@
-# Files copies (or symlinks) of BLIS files
+# File copies (or symlinks) of BLIS files
+config.mk
 make_defs.mk
-gemm_microkernel.c
 
 # Build files
 test_conv
