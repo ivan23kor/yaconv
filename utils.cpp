@@ -4,7 +4,23 @@
 #include <iostream>
 
 float *alignedAlloc(int Size, int Alignment) {
-  return (float *)aligned_alloc(Alignment, Size * sizeof(float));
+  float *Ans = nullptr;
+  int Ret = posix_memalign((void **)&Ans, Alignment, Size * sizeof(float));
+
+  if (Ret == 0)
+    return Ans;
+
+  // Handle bad alloc
+  std::cerr << "\033[31m";
+  if (Ret == ENOMEM)
+    std::cerr << "Memory allocation error in posix_memalign" << std::endl;
+  else if (Ret == EINVAL)
+    std::cerr << "The alignment parameter in posix_memalign is not a power of 2 at least as large as sizeof(void *)" << std::endl;
+  else
+    std::cerr << "Unknown error in posix_memalign" << std::endl;
+  std::cerr << "\033[0m";
+
+  exit(Ret);
 }
 
 void randomizeTensor(float *&Tensor, int Size, int MaxVal) {
