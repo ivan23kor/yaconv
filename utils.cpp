@@ -48,7 +48,7 @@ float *allocateRandomTensor(int Size, int MaxVal, int Alignment) {
   return Tensor;
 }
 
-float maxTensorDiff(std::vector<float *> Tensors, const int Size) {
+float maxRelativeDiff(std::vector<float *> Tensors, const int Size) {
   int N = Tensors.size();
   if (N < 2)
     return 0.0;

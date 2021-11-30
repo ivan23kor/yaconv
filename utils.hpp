@@ -18,7 +18,7 @@ float *allocateFilledTensor(int Size, float Value = -1., int Alignment = -1);
 
 float *allocateRandomTensor(int Size, int MaxVal = 256, int Alignment = -1);
 
-float maxTensorDiff(std::vector<float *> Tensors, const int Size);
+float maxRelativeDiff(std::vector<float *> Tensors, const int Size);
 
 void printTensor(float *Tensor, std::vector<int> Sizes,
                  std::string Pre = "", const std::string Post = "\n",

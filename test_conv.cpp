@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
   //   std::cout << 2 * M * C / 1000 * FH * FW * OH / 1000 * OW / Time / 1000 << "\n";
   // std::cout << Im2colTime / Repeat << "," << GEMMTime / Repeat << "\n";
 
-  std::cout << "MaxDiff: " << maxTensorDiff(Outputs, M * OH * OW) << "\n";
+  std::cout << "Max relative diff: " << maxRelativeDiff(Outputs, M * OH * OW) << "\n";
 
   // Free tensor memory
   // free(InputCHW);

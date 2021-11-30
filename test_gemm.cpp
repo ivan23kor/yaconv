@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
   for (const auto &Time : Times)
     std::cout << Time << "\n";
 
-  std::cout << "MaxDiff: " << maxTensorDiff(Outputs, M * N) << "\n";
+  std::cout << "Max relative diff: " << maxRelativeDiff(Outputs, M * N) << "\n";
 
   return 0;
 }
