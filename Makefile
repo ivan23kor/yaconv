@@ -7,8 +7,7 @@ FLAGS := -std=c++11
 FLAGS += $(CKOPTFLAGS) $(CKVECFLAGS)
 
 BLIS := -lblis
-BLAS := -lblas
-LIBS := $(BLIS) $(BLAS)
+LIBS := $(BLIS)
 
 TARGETS := test_gemm test_conv
 
