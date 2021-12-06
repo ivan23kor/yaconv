@@ -7,6 +7,7 @@
 
 using namespace std::chrono;
 extern double YaConvPack1, YaConvPack2, YaConvComp;
+extern double Im2colCopy, Im2colComp;
 
 void convertCHWToHWC(float *CHW, float *HWC, int C, int H, int W) {
   for (int c = 0; c < C; ++c)
@@ -79,6 +80,7 @@ int main(int argc, char **argv) {
 #define RUN(f)                                                                 \
   f;                                                                           \
   YaConvPack1 = YaConvPack2 = YaConvComp = 0.0;                                \
+  Im2colCopy = Im2colComp = 0.0;                                \
   TempTime = 0.0;                                                              \
   for (int i = 0; i < Repeat; ++i) {                                           \
     flushCache();                                                              \
@@ -93,13 +95,14 @@ int main(int argc, char **argv) {
   // Convolution with im2col
   auto *im2colOutputMHW = allocateFilledTensor(M * OH * OW);
   RUN(convIm2col(InputCHW, FilterMCHW, im2colOutputMHW, C, H, W, M, FH, FW, OH, OW, PH, PW, SH, SW))
+  std::cout << "Im2colCopy: " << Im2colCopy / Repeat << ", Im2colComp: " << Im2colComp / Repeat << "\n";
   Outputs.push_back(alignedAlloc(OH * OW * M));
   convertCHWToHWC(im2colOutputMHW, Outputs.back(), M, OH, OW);
 
   // Yaconv
-  Outputs.push_back(yaconvExtraOutput(H, W, FW, FW, PW, OW, M));
-  RUN(yaconv(InputHWC, FilterMHWC, Outputs.back(), C, H, W, M, FH, FW, PH, PW, SH, SW))
-  std::cout << "L3Pack: " << YaConvPack1 / Repeat << ", L2Pack: " << YaConvPack2 / Repeat << ", Comp: " << YaConvComp / Repeat << "\n";
+  // Outputs.push_back(yaconvExtraOutput(H, W, FW, FW, PW, OW, M));
+  // RUN(yaconv(InputHWC, FilterMHWC, Outputs.back(), C, H, W, M, FH, FW, PH, PW, SH, SW))
+  // std::cout << "L3Pack: " << YaConvPack1 / Repeat << ", L2Pack: " << YaConvPack2 / Repeat << ", Comp: " << YaConvComp / Repeat << "\n";
   // clang-format on
 
   // Print tensors for each run
@@ -109,19 +112,16 @@ int main(int argc, char **argv) {
   // Print times for each run
   for (const auto &Time : Times)
     std::cout << Time << "\n";
-  // for (const auto &Time : Times)
-  //   std::cout << 2 * M * C / 1000 * FH * FW * OH / 1000 * OW / Time / 1000 << "\n";
-  // std::cout << Im2colTime / Repeat << "," << GEMMTime / Repeat << "\n";
 
   std::cout << "Max relative diff: " << maxRelativeDiff(Outputs, M * OH * OW) << "\n";
 
   // Free tensor memory
-  // free(InputCHW);
-  // free(InputHWC);
-  // free(FilterMCHW);
-  // free(FilterMHWC);
-  // free(im2colOutputMHW);
-  // for (const auto &Output: Outputs)
-  //   free(Output);
+  free(InputCHW);
+  free(InputHWC);
+  free(FilterMCHW);
+  free(FilterMHWC);
+  free(im2colOutputMHW);
+  for (const auto &Output: Outputs)
+    free(Output);
   return 0;
 }

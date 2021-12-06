@@ -1,7 +1,13 @@
 #include "blis.h"     // BLAS gemm
 #include "gemm.hpp"   // custom gemm
 #include "utils.hpp"  // Tensor aligned allocation and printing
+#include <chrono>     // Timing
 #include <iostream>   // debug printing
+
+// Timing
+using namespace std::chrono;
+static high_resolution_clock::time_point t1, t2;
+double Im2colCopy = 0.0, Im2colComp = 0.0;
 
 // The following two functions are taken from
 // https://github.com/BVLC/caffe/blob/master/src/caffe/util/im2col.cpp
@@ -54,7 +60,10 @@ void convIm2col(const float *Input, float *Kernel, float *Output, int C,
                 int SH, int SW) {
 
   float *InputBuf = alignedAlloc(C * KH * KW * OH * OW);
+  t1 = high_resolution_clock::now();
   im2col(Input, C, H, W, KH, KW, PH, PW, SH, SW, 1, 1, InputBuf);
+  t2 = high_resolution_clock::now();
+  Im2colCopy += duration_cast<duration<double>>(t2 - t1).count();
 
   int K = C * KH * KW;
   int N = OH * OW;
@@ -73,8 +82,11 @@ void convIm2col(const float *Input, float *Kernel, float *Output, int C,
   int rsc = N;
   int csc = 1;
   float alpha = 1.0, beta = 0.0;
+  t1 = high_resolution_clock::now();
   bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &alpha, Kernel,
             rsa, csa, InputBuf, rsb, csb, &beta, Output, rsc, csc);
+  t2 = high_resolution_clock::now();
+  Im2colComp += duration_cast<duration<double>>(t2 - t1).count();
 
   delete[] InputBuf;
 }

@@ -37,7 +37,7 @@ void yaconv(float *Image, float *Filter, float *Output,
   OW = (W - FW + 2 * PW) / SW + 1;
 
   // Pack Image in L3
-  auto *ImagePack = alignedAlloc(BLOCK_MC * BLOCK_NC);
+  auto *ImagePack = alignedAlloc(C * (H + BLOCK_NR) * W);//BLOCK_MC * BLOCK_NC);
   // printTensor(Image, {H, W * C});
   // packImage(Image, ImagePack);
   // printTensor(ImagePack, {W * C * (int)std::ceil((float)H / BLOCK_NR), BLOCK_NR});
@@ -52,7 +52,7 @@ void yaconv(float *Image, float *Filter, float *Output,
   auto *CBuff = alignedAlloc(BLOCK_MR * BLOCK_NR);
 
   // TODO: Add an extra loop over H; this assumes Image fits in L3, which is almost always true
-  int Debug = 1;
+  int Debug = 0;
   if (Debug == 2)
     t1 = high_resolution_clock::now();
   packImage(Image, ImagePack, H);
@@ -66,9 +66,9 @@ void yaconv(float *Image, float *Filter, float *Output,
     YaConvPack1 += duration_cast<duration<double>>(t2 - t1).count();
     t3 = high_resolution_clock::now();
   }
-  for (int m = 0; m < M; m += BLOCK_MC) {
-    int MC = MIN(M - m, BLOCK_MC);
-    for (int fh = 0; fh < FH; ++fh) {
+  for (int fh = 0; fh < FH; ++fh) {
+    for (int m = 0; m < M; m += BLOCK_MC) {
+      int MC = MIN(M - m, BLOCK_MC);
       for (int kc = 0; kc < FW * C; kc += BLOCK_KC) {
         float *Beta = (fh == 0) && (kc == 0) ? bli_s0 : bli_s1;
         int KC = MIN(FW * C - kc, BLOCK_KC);

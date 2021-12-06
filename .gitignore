@@ -3,6 +3,6 @@ config.mk
 make_defs.mk
 
 # Build files
-test_conv
-test_gemm
-*.o
+conv
+gemm
+obj/*.o

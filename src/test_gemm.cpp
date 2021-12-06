@@ -20,14 +20,12 @@ int main(int argc, char **argv) {
   // Gemm
   float *A = allocateRandomTensor(M * K);
   float *B = allocateRandomTensor(K * N);
-  // printTensor(A, {M, K}); printTensor(B, {K, N});
 
   // Output tensors
   std::vector<float *> Outputs;
 
   // GEMM variables
   float Alpha = 1.0, Beta = 0.0;
-  const uint64_t Flops = 2 * (uint64_t)M * (uint64_t)K * (uint64_t)N;
 
   // Time variables
   high_resolution_clock::time_point t1, t2;
@@ -36,6 +34,7 @@ int main(int argc, char **argv) {
 
 #define RUN(f)                                                                 \
   Outputs.push_back(alignedAlloc(M * N));                                      \
+  f;                                                                           \
   TempTime = 0.0;                                                              \
   for (int i = 0; i < Repeat; ++i) {                                           \
     flushCache();                                                              \
@@ -46,16 +45,15 @@ int main(int argc, char **argv) {
   }                                                                            \
   Times.push_back(TempTime / Repeat);
 
-  // clang-format off
   // BLIS gemm
   RUN(bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &Alpha, A, K, 1, B, N, 1, &Beta, Outputs.back(), N, 1))
 
-  // My gemm
-  RUN(gemm(A, B, Outputs.back(), M, K, N, K, N, N, Alpha, Beta))
-  // clang-format on
+  // Custom gemm
+  // RUN(gemm(A, B, Outputs.back(), M, K, N, K, N, N, Alpha, Beta))
 
-  // Print tensors for each run
-  // for (const auto &Output : Outputs) printTensor(Output, {M, N});
+  // Print tensors after each run
+  // for (const auto &Output : Outputs)
+  //   printTensor(Output, {M, N});
 
   // Print time for each run
   for (const auto &Time : Times)

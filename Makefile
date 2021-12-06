@@ -1,26 +1,53 @@
-CXX := g++
+# https://github.com/TheNetAdmin/Makefile-Templates/blob/master/SmallProject/Template/Makefile
 
-include config.mk # blis/config.mk
-include make_defs.mk # blis/config/ARCH/make_defs.mk
+# BLIS configs contain compilation flags
+include config.mk # share/blis/config.mk
+include make_defs.mk # share/blis/config/ARCH/make_defs.mk
 
-FLAGS := -std=c++11
-FLAGS += $(CKOPTFLAGS) $(CKVECFLAGS)
+# tool macros
+CXX ?= g++
+CXXFLAGS += -std=c++11
+CXXFLAGS += $(CKOPTFLAGS) $(CKVECFLAGS)
 
-BLIS := -lblis
-LIBS := $(BLIS)
+# path macros
+OBJ_PATH := obj
+SRC_PATH := src
 
-TARGETS := test_gemm test_conv
+# compile macros
+TARGETS := conv gemm
 
+# src files & obj files
+SRC := $(foreach x, $(SRC_PATH), $(wildcard $(addprefix $(x)/*,.cpp)))
+OBJ := $(addprefix $(OBJ_PATH)/, $(addsuffix .o, $(notdir $(basename $(SRC)))))
+GEMM_OBJ := $(filter-out %conv.o, $(OBJ))
+CONV_OBJ := $(filter-out %gemm.o, $(OBJ))
+
+# clean files list
+CLEAN_LIST := $(TARGETS) $(OBJ)
+
+# default rule
+default: makedir all
+
+LIBS := -lblis
+
+gemm: $(GEMM_OBJ)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS)
+
+conv: $(CONV_OBJ)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS)
+
+$(OBJ_PATH)/%.o: $(SRC_PATH)/%.c*
+	$(CXX) $(CXXFLAGS) $^ -c -o $@
+
+# phony rules
+.PHONY: makedir
+makedir:
+	@mkdir -p $(OBJ_PATH)
+
+.PHONY: all
 all: $(TARGETS)
 
-test_gemm: gemm.o utils.o test_gemm.o
-	$(CXX) $(FLAGS) $^ -o $@ $(LIBS)
-
-test_conv: conv.o yaconv.o gemm.o utils.o test_conv.o
-	$(CXX) $(FLAGS) $^ -o $@ $(LIBS)
-
-%.o: %.cpp
-	$(CXX) $(FLAGS) $(DEBUG_FLAGS) -c $<
-
+.PHONY: clean
 clean:
-	$(RM) *.o $(TARGETS)
+	@echo CLEAN $(CLEAN_LIST)
+	@rm -f $(CLEAN_LIST)
