@@ -63,15 +63,6 @@ int main(int argc, char **argv) {
   auto *FilterMHWC = allocateRandomTensor(M * FH * FW * C);
   convertMCHWToMHWC(FilterMCHW, FilterMHWC, M, C, FH, FW);
 
-  // Print Input and Filter tensors
-  // printTensor(InputCHW, {C, H, W});
-  // printTensor(InputHWC, {H, W, C});
-  // printTensor(FilterMCHW, {M, C, FH, FW});
-  // printTensor(FilterMHWC, {M, FH, FW, C});
-
-  // Output tensors
-  std::vector<float *> Outputs;
-
   // Time variables
   high_resolution_clock::time_point t1, t2;
   std::vector<double> Times;
@@ -91,19 +82,18 @@ int main(int argc, char **argv) {
   }                                                                            \
   Times.push_back(TempTime / Repeat);
 
-  // clang-format off
+  // Output tensors
+  std::vector<float *> Outputs;
+
   // Convolution with im2col
-  auto *im2colOutputMHW = allocateFilledTensor(M * OH * OW);
-  RUN(convIm2col(InputCHW, FilterMCHW, im2colOutputMHW, C, H, W, M, FH, FW, OH, OW, PH, PW, SH, SW))
-  std::cout << "Im2colCopy: " << Im2colCopy / Repeat << ", Im2colComp: " << Im2colComp / Repeat << "\n";
   Outputs.push_back(alignedAlloc(OH * OW * M));
-  convertCHWToHWC(im2colOutputMHW, Outputs.back(), M, OH, OW);
+  RUN(convIm2col(InputCHW, FilterMCHW, Outputs.back(), C, H, W, M, FH, FW, OH, OW, PH, PW, SH, SW))
+  std::cout << "Im2colCopy: " << Im2colCopy / Repeat << ", Im2colComp: " << Im2colComp / Repeat << "\n";
 
   // Yaconv
   // Outputs.push_back(yaconvExtraOutput(H, W, FW, FW, PW, OW, M));
   // RUN(yaconv(InputHWC, FilterMHWC, Outputs.back(), C, H, W, M, FH, FW, PH, PW, SH, SW))
   // std::cout << "L3Pack: " << YaConvPack1 / Repeat << ", L2Pack: " << YaConvPack2 / Repeat << ", Comp: " << YaConvComp / Repeat << "\n";
-  // clang-format on
 
   // Print tensors for each run
   // for (const auto &Output: Outputs)
@@ -120,8 +110,7 @@ int main(int argc, char **argv) {
   free(InputHWC);
   free(FilterMCHW);
   free(FilterMHWC);
-  free(im2colOutputMHW);
-  for (const auto &Output: Outputs)
-    free(Output);
+  // for (const auto &Output: Outputs)
+  //   free(Output);
   return 0;
 }

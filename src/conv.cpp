@@ -71,16 +71,13 @@ void convIm2col(const float *Input, float *Kernel, float *Output, int C,
   // std::cout << "im2col buffer: " << C * KH * KW << " x " << OH * OW << "\n";
   // std::cout << "im2col GEMM: " << M << " x " << K << " x " << N << "\n";
 
-  // Custom GEMM
-  // gemm(Kernel, InputBuf, Output, M, K, N, K, N, N, 1.0, 0.0);
-
   // BLIS GEMM
   int rsa = K;
   int csa = 1;
   int rsb = N;
   int csb = 1;
-  int rsc = N;
-  int csc = 1;
+  int rsc = 1;
+  int csc = M;
   float alpha = 1.0, beta = 0.0;
   t1 = high_resolution_clock::now();
   bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &alpha, Kernel,
