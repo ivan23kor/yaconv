@@ -121,7 +121,12 @@ void printTensor(float *Tensor, std::vector<int> Sizes, std::string Pre,
   printTensor(Tensor, NewSizes, Pre, "]" + Post, false, Setw);
 }
 
-void __attribute__((optimize("O0"))) flushCache(int L3SizeInBytes) {
+#ifdef __clang__
+#define OPTNONE optnone
+#else
+#define OPTNONE optimize("O0")
+#endif
+void __attribute__((OPTNONE)) flushCache(int L3SizeInBytes) {
   int L3SizeInFloats = L3SizeInBytes / sizeof(float);
   auto *Dummy = allocateRandomTensor(L3SizeInFloats);
   free(Dummy);
