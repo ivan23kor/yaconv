@@ -47,98 +47,105 @@ void yaconv(float *Image, float *Filter, float *Output,
             int C_, int H_, int W_, int M_, int FH_, int FW_,
             int PH_, int PW_, int SH_, int SW_) {
 
-  // Output sizes
+  // Set convolution parameters to global values
   C = C_, H = H_, W = W_, M = M_, FH = FH_, FW = FW_, PH = PH_, PW = PW_, SH = SH_, SW = SW_;
+
+  // Output sizes
   OH = (H - FH + 2 * PH) / SH + 1;
   OW = (W - FW + 2 * PW) / SW + 1;
 
-  // Pack Image in L3
-  auto *ImagePack = alignedAlloc(C * (H + BLOCK_NR) * W);//BLOCK_MC * BLOCK_NC);
-  // printTensor(Image, {H, W * C});
-  // packImage(Image, ImagePack);
-  // printTensor(ImagePack, {W * C * (int)std::ceil((float)H / BLOCK_NR), BLOCK_NR});
+  // Compute runtime-based slice of the image that fits in L3
+  int YACONV_NC = BLOCK_MC * BLOCK_NC / W / C;
+  if (YACONV_NC % BLOCK_NR != 0)
+    YACONV_NC += BLOCK_NR - YACONV_NC % BLOCK_NR;
 
-  // Pack Filter in L2
+  // Allocate page-aligned L3-sized buffer for packed Image
+  auto *ImagePack = alignedAlloc(BLOCK_MC * BLOCK_NC);
+
+  // Allocate page-aligned L2-sized buffer for packed Filter
   auto *FilterPack = alignedAlloc(BLOCK_MC * BLOCK_KC);
-  // printTensor(Filter, {M, FH * FW * C});
-  // int MC = M, KC = 10;
-  // packFilter(Filter, FilterPack, MC, KC);
-  // printTensor(FilterPack, {KC * (int)std::ceil((float)M / BLOCK_MR), BLOCK_MR});
 
-  auto *CBuff = alignedAlloc(BLOCK_MR * BLOCK_NR);
-
-  // TODO: Add an extra loop over H; this assumes Image fits in L3, which is almost always true
-  DEBUG_TIME(t1 = high_resolution_clock::now();)
-  packImage(Image, ImagePack, H);
-  DEBUG_TIME(
-    t2 = high_resolution_clock::now();
-    YaConvPack1 += duration_cast<duration<double>>(t2 - t1).count();
-    t3 = high_resolution_clock::now();
-  )
   DEBUG_OUTPUT(
     printTensor(Image, {H, W * C});
     printTensor(Filter, {M, FH * FW * C});
-    printTensor(ImagePack, {W * C * (int)std::ceil((float)H / BLOCK_NR), BLOCK_NR});
   )
-  for (int fh = 0; fh < FH; ++fh) {
-    for (int m = 0; m < M; m += BLOCK_MC) {
-      int MC = MIN(M - m, BLOCK_MC);
-      for (int kc = 0; kc < FW * C; kc += BLOCK_KC) {
-        float *Beta = (fh == 0) && (kc == 0) ? bli_s0 : bli_s1;
-        int KC = MIN(FW * C - kc, BLOCK_KC);
-        DEBUG_TIME(t1 = high_resolution_clock::now();)
-        packFilter(Filter + (m * FH + fh) * FW * C + kc, FilterPack, MC, KC);
-        DEBUG_TIME(
-          t2 = high_resolution_clock::now();
-          YaConvPack2 += duration_cast<duration<double>>(t2 - t1).count();
-        )
-        DEBUG_OUTPUT(printTensor(FilterPack, {KC * (int)std::ceil((float)MC / BLOCK_MR), BLOCK_MR});)
-        for (int nr = 0; nr < H; nr += BLOCK_NR) {
-          for (int ow = 0; ow < OW; ++ow) {
-            int ImageStart = (ow - PW) * C + kc;
-            int ImageEnd = MIN(W * C, ImageStart + KC);
 
-            float *Ar = FilterPack;
-            if (ImageStart < 0) {
-              Ar -= ImageStart * BLOCK_MR;
-              ImageStart = 0;
-            }
+  // Allocate SIMD-aligned accumulation buffer
+  auto *CBuff = alignedAlloc(BLOCK_MR * BLOCK_NR, BLIS_SIMD_ALIGN_SIZE);
 
-            int K = ImageEnd - ImageStart;
-            DEBUG_OUTPUT(std::cout << "fh = " << fh << ", ImageStart = " << ImageStart << ", K = " << K << ", OutputOff = " << ((nr - fh + PH) * OW + ow) * M + m<< "\n";)
-            if (K <= 0)
-              continue;
+  for (int nc = 0; nc < H; nc += YACONV_NC) {
+    int NC = MIN(H - nc, YACONV_NC);
+    DEBUG_TIME(t1 = high_resolution_clock::now();)
+    packImage(Image + nc * W * C, ImagePack, NC);
+    DEBUG_TIME(
+      t2 = high_resolution_clock::now();
+      YaConvPack1 += duration_cast<duration<double>>(t2 - t1).count();
+      t3 = high_resolution_clock::now();
+    )
+    DEBUG_OUTPUT(
+      printTensor(ImagePack, {W * C * (int)std::ceil((float)H / BLOCK_NR), BLOCK_NR});
+    )
+    for (int fh = 0; fh < FH; ++fh) {
+      for (int m = 0; m < M; m += BLOCK_MC) {
+        int MC = MIN(M - m, BLOCK_MC);
+        for (int kc = 0; kc < FW * C; kc += BLOCK_KC) {
+          float *Beta = (fh == 0) && (kc == 0) ? bli_s0 : bli_s1;
+          int KC = MIN(FW * C - kc, BLOCK_KC);
+          DEBUG_TIME(t1 = high_resolution_clock::now();)
+          packFilter(Filter + (m * FH + fh) * FW * C + kc, FilterPack, MC, KC);
+          DEBUG_TIME(
+            t2 = high_resolution_clock::now();
+            YaConvPack2 += duration_cast<duration<double>>(t2 - t1).count();
+          )
+          DEBUG_OUTPUT(printTensor(FilterPack, {KC * (int)std::ceil((float)MC / BLOCK_MR), BLOCK_MR});)
+          for (int nr = 0; nr < NC; nr += BLOCK_NR) {
+            for (int ow = 0; ow < OW; ++ow) {
+              int ImageStart = (ow - PW) * C + kc;
+              int ImageEnd = MIN(W * C, ImageStart + KC);
 
-            float *Br = ImagePack + nr * W * C + ImageStart * BLOCK_NR;
-            float *Cr = Output + ((nr - fh + PH) * OW + ow) * M + m;
-
-            for (int mr = 0; mr < MC; mr += BLOCK_MR) {
-              DEBUG_OUTPUT(
-                std::cout << "Going to gemm Weight:\n";
-                printTensor(Ar, {K, BLOCK_MR});
-                std::cout << "and Image" << std::endl;
-                printTensor(Br, {K, BLOCK_NR});
-              )
-              if (mr + BLOCK_MR <= MC) {
-                bli_sset0s_mxn(1, BLOCK_MR, Cr, 1, OW * M);
-                sgemm_ukr(K, bli_s1, Ar, Br, Beta, Cr, 1, OW * M);
-              } else {
-                sgemm_ukr(K, bli_s1, Ar, Br, bli_s0, CBuff, BLOCK_NR, 1);
-                bli_sxpbys_mxn(MC - mr, BLOCK_NR, CBuff, BLOCK_NR, 1, Beta, Cr, 1, OW * M);
+              float *Ar = FilterPack;
+              if (ImageStart < 0) {
+                Ar -= ImageStart * BLOCK_MR;
+                ImageStart = 0;
               }
-              DEBUG_OUTPUT(
-                std::cout << "so now the result is:" << std::endl;
-                printTensor(Output, {OH * OW, M});
-              )
 
-              Ar += BLOCK_MR * KC;
-              Cr += BLOCK_MR;
+              int K = ImageEnd - ImageStart;
+              DEBUG_OUTPUT(std::cout << "fh = " << fh << ", ImageStart = " << ImageStart << ", K = " << K << ", OutputOff = " << ((nr - fh + PH) * OW + ow) * M + m<< "\n";)
+              if (K <= 0)
+                continue;
+
+              float *Br = ImagePack + nr * W * C + ImageStart * BLOCK_NR;
+              float *Cr = Output + ((nc + nr - fh + PH) * OW + ow) * M + m;
+
+              for (int mr = 0; mr < MC; mr += BLOCK_MR) {
+                DEBUG_OUTPUT(
+                  std::cout << "Going to gemm Weight:\n";
+                  printTensor(Ar, {K, BLOCK_MR});
+                  std::cout << "and Image" << std::endl;
+                  printTensor(Br, {K, BLOCK_NR});
+                )
+                if (mr + BLOCK_MR <= MC) {
+                  bli_sset0s_mxn(1, BLOCK_MR, Cr, 1, OW * M);
+                  sgemm_ukr(K, bli_s1, Ar, Br, Beta, Cr, 1, OW * M);
+                } else {
+                  sgemm_ukr(K, bli_s1, Ar, Br, bli_s0, CBuff, BLOCK_NR, 1);
+                  bli_sxpbys_mxn(MC - mr, BLOCK_NR, CBuff, BLOCK_NR, 1, Beta, Cr, 1, OW * M);
+                }
+                DEBUG_OUTPUT(
+                  std::cout << "so now the result is:" << std::endl;
+                  printTensor(Output, {OH * OW, M});
+                )
+
+                Ar += BLOCK_MR * KC;
+                Cr += BLOCK_MR;
+              }
             }
           }
         }
       }
     }
   }
+
   DEBUG_TIME(
     t4 = high_resolution_clock::now();
     YaConvComp += duration_cast<duration<double>>(t4 - t3).count();
