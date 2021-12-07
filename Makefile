@@ -6,8 +6,8 @@ include make_defs.mk # share/blis/config/ARCH/make_defs.mk
 
 # tool macros
 CXX ?= g++
-CXXFLAGS += -std=c++11
-CXXFLAGS += $(CKOPTFLAGS) $(CKVECFLAGS)
+override CXXFLAGS += -std=c++11
+override CXXFLAGS += $(CKOPTFLAGS) $(CKVECFLAGS)
 
 # path macros
 OBJ_PATH := obj
