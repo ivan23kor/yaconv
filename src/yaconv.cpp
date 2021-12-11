@@ -60,7 +60,7 @@ void yaconv(float *Image, float *Filter, float *Output,
     YACONV_NC += BLOCK_NR - YACONV_NC % BLOCK_NR;
 
   // Allocate page-aligned L3-sized buffer for packed Image
-  auto *ImagePack = alignedAlloc(BLOCK_MC * BLOCK_NC);
+  auto *ImagePack = alignedAlloc(W * C * YACONV_NC);
 
   // Allocate page-aligned L2-sized buffer for packed Filter
   auto *FilterPack = alignedAlloc(BLOCK_MC * BLOCK_KC);
@@ -89,7 +89,6 @@ void yaconv(float *Image, float *Filter, float *Output,
       for (int m = 0; m < M; m += BLOCK_MC) {
         int MC = MIN(M - m, BLOCK_MC);
         for (int kc = 0; kc < FW * C; kc += BLOCK_KC) {
-          float *Beta = (fh == 0) && (kc == 0) ? bli_s0 : bli_s1;
           int KC = MIN(FW * C - kc, BLOCK_KC);
           DEBUG_TIME(t1 = high_resolution_clock::now();)
           packFilter(Filter + (m * FH + fh) * FW * C + kc, FilterPack, MC, KC);
@@ -110,7 +109,6 @@ void yaconv(float *Image, float *Filter, float *Output,
               }
 
               int K = ImageEnd - ImageStart;
-              DEBUG_OUTPUT(std::cout << "fh = " << fh << ", ImageStart = " << ImageStart << ", K = " << K << ", OutputOff = " << ((nr - fh + PH) * OW + ow) * M + m<< "\n";)
               if (K <= 0)
                 continue;
 
@@ -124,12 +122,12 @@ void yaconv(float *Image, float *Filter, float *Output,
                   std::cout << "and Image" << std::endl;
                   printTensor(Br, {K, BLOCK_NR});
                 )
+                // bli_sset0s_mxn(1, BLOCK_MR, Cr, OW * M, 1);
                 if (mr + BLOCK_MR <= MC) {
-                  bli_sset0s_mxn(1, BLOCK_MR, Cr, 1, OW * M);
-                  sgemm_ukr(K, bli_s1, Ar, Br, Beta, Cr, 1, OW * M);
+                  sgemm_ukr(K, bli_s1, Ar, Br, bli_s1, Cr, 1, OW * M);
                 } else {
                   sgemm_ukr(K, bli_s1, Ar, Br, bli_s0, CBuff, BLOCK_NR, 1);
-                  bli_sxpbys_mxn(MC - mr, BLOCK_NR, CBuff, BLOCK_NR, 1, Beta, Cr, 1, OW * M);
+                  bli_sxpbys_mxn(MC - mr, BLOCK_NR, CBuff, BLOCK_NR, 1, bli_s1, Cr, 1, OW * M);
                 }
                 DEBUG_OUTPUT(
                   std::cout << "so now the result is:" << std::endl;
