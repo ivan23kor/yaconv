@@ -9,6 +9,15 @@ CXX ?= g++
 override CXXFLAGS += -std=c++11
 override CXXFLAGS += $(CKOPTFLAGS) $(CKVECFLAGS)
 
+LIBS := -lblis
+
+ifeq ($(OPENBLAS), 1)
+	# use OpenBLAS gemm in im2col-based convolution (default: BLIS gemm) and
+	# use OpenBLAS gemm in test_gemm alongside with BLIS
+	LIBS += -lopenblas
+	override CXXFLAGS += -DOPENBLAS_GEMM
+endif
+
 # path macros
 OBJ_PATH := obj
 SRC_PATH := src
@@ -27,8 +36,6 @@ CLEAN_LIST := $(TARGETS) $(OBJ)
 
 # default rule
 default: makedir all
-
-LIBS := -lblis
 
 gemm: $(GEMM_OBJ)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBS)

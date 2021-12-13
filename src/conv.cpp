@@ -1,6 +1,9 @@
-#include "blis.h"     // BLAS gemm
 #include "gemm.hpp"   // custom gemm
 #include "utils.hpp"  // Tensor aligned allocation and printing
+#include <blis.h>     // BLIS gemm
+#ifdef OPENBLAS_GEMM
+#include <cblas.h>    // OpenBLAS gemm
+#endif
 #include <chrono>     // Timing
 #include <iostream>   // debug printing
 
@@ -67,21 +70,21 @@ void convIm2col(const float *Input, float *Kernel, float *Output, int C,
 
   int K = C * KH * KW;
   int N = OH * OW;
+  float alpha = 1.0, beta = 0.0;
 
   // std::cout << "im2col buffer: " << C * KH * KW << " x " << OH * OW << "\n";
   // std::cout << "im2col GEMM: " << M << " x " << K << " x " << N << "\n";
 
-  // BLIS GEMM
-  int rsa = K;
-  int csa = 1;
-  int rsb = N;
-  int csb = 1;
-  int rsc = 1;
-  int csc = M;
-  float alpha = 1.0, beta = 0.0;
   t1 = high_resolution_clock::now();
-  bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &alpha, Kernel,
-            rsa, csa, InputBuf, rsb, csb, &beta, Output, rsc, csc);
+
+#ifdef OPENBLAS_GEMM // OpenBLAS GEMM
+  cblas_sgemm(CblasColMajor, CblasTrans, CblasTrans, M, N, K,
+      alpha, Kernel, K, InputBuf, N, beta, Output, M);
+#else // BLIS GEMM
+  bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K,
+      &alpha, Kernel, K, 1, InputBuf, N, 1, &beta, Output, 1, M);
+#endif
+
   t2 = high_resolution_clock::now();
   Im2colComp += duration_cast<duration<double>>(t2 - t1).count();
 

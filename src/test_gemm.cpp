@@ -1,6 +1,9 @@
 #include "gemm.hpp"
 #include "utils.hpp"
 #include <blis.h>
+#ifdef OPENBLAS_GEMM
+#include <cblas.h>
+#endif
 #include <chrono>
 #include <iostream>
 
@@ -44,6 +47,11 @@ int main(int argc, char **argv) {
     TempTime += duration_cast<duration<double>>(t2 - t1).count();              \
   }                                                                            \
   Times.push_back(TempTime / Repeat);
+
+  // BLIS gemm
+#ifdef OPENBLAS_GEMM
+  RUN(cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, Alpha, A, K, B, N, Beta, Outputs.back(), M))
+#endif
 
   // BLIS gemm
   RUN(bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, M, N, K, &Alpha, A, K, 1, B, N, 1, &Beta, Outputs.back(), N, 1))
