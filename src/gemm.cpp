@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 namespace {
-#include "blis_params.hpp"
+#include "blis_utils.hpp"
 }; // namespace
 
 // A is row-major

@@ -1,6 +1,6 @@
 #include <blis.h>
 namespace {
-#include "blis_params.hpp" // BLIS block sizes, microkernels
+#include "blis_utils.hpp" // BLIS block sizes, microkernels
 };
 #include "utils.hpp"  // Tensor aligned allocation and printing
 #include <chrono>     // Timing
