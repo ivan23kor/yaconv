@@ -30,6 +30,7 @@ double YaConvPack1 = 0.0, YaConvPack2 = 0.0, YaConvComp = 0.0;
 
 // TODO: Convolution parameters as a struct
 static int C, H, W, M, FH, FW, OH, OW, SH, SW, PH, PW;
+static int YACONV_NC;
 
 // Image is H x W x C
 void packImage(float *Image, float *Pack, int NC) {
@@ -41,6 +42,18 @@ void packImage(float *Image, float *Pack, int NC) {
 void packFilter(float *Filter, float *Pack, int MC, int KC) {
   for (int mr = 0; mr < MC; mr += BLOCK_MR)
     packAPanel(Filter + mr * FH * FW * C, Pack + mr * KC, MIN(MC - mr, BLOCK_MR), KC, FH * FW * C, 1, BLOCK_MR);
+}
+
+static float *ImagePack = nullptr;
+static float *FilterPack = nullptr;
+static float *CBuff = nullptr;
+
+static void allocateYaconvBuffers() {
+  if (ImagePack != nullptr)
+    return;
+  ImagePack = alignedAlloc(W * C * YACONV_NC);
+  FilterPack = alignedAlloc(BLOCK_MC * BLOCK_KC);
+  CBuff = alignedAlloc(BLOCK_MR * BLOCK_NR, BLIS_SIMD_ALIGN_SIZE);
 }
 
 void yaconv(float *Image, float *Filter, float *Output,
@@ -55,23 +68,16 @@ void yaconv(float *Image, float *Filter, float *Output,
   OW = (W - FW + 2 * PW) / SW + 1;
 
   // Compute runtime-based slice of the image that fits in L3
-  int YACONV_NC = BLOCK_MC * BLOCK_NC / W / C;
+  YACONV_NC = BLOCK_MC * BLOCK_NC / W / C;
   if (YACONV_NC % BLOCK_NR != 0)
     YACONV_NC += BLOCK_NR - YACONV_NC % BLOCK_NR;
 
-  // Allocate page-aligned L3-sized buffer for packed Image
-  auto *ImagePack = alignedAlloc(W * C * YACONV_NC);
-
-  // Allocate page-aligned L2-sized buffer for packed Filter
-  auto *FilterPack = alignedAlloc(BLOCK_MC * BLOCK_KC);
+  allocateYaconvBuffers();
 
   DEBUG_OUTPUT(
     printTensor(Image, {H, W * C});
     printTensor(Filter, {M, FH * FW * C});
   )
-
-  // Allocate SIMD-aligned accumulation buffer
-  auto *CBuff = alignedAlloc(BLOCK_MR * BLOCK_NR, BLIS_SIMD_ALIGN_SIZE);
 
   for (int nc = 0; nc < H; nc += YACONV_NC) {
     int NC = MIN(H - nc, YACONV_NC);
@@ -148,4 +154,5 @@ void yaconv(float *Image, float *Filter, float *Output,
     t4 = high_resolution_clock::now();
     YaConvComp += duration_cast<duration<double>>(t4 - t3).count();
   )
+  // TODO: deallocate buffers
 }
