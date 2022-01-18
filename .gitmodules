@@ -1,0 +1,3 @@
+[submodule "OpenBLAS"]
+	path = OpenBLAS
+	url = git@github.com:ivan23kor/OpenBLAS.git
