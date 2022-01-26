@@ -70,8 +70,7 @@ int main(int argc, char** argv) {
 #if defined(IM2COL_OPENBLAS)
   im2col_conv(images, N, H, W, C, filter, FH, FW, M, outputs, PH, PW);
 #elif defined(YACONV_OPENBLAS)
-  for (int i = 0; i < N; ++i)
-    yaconv(images[i], 1, H, W, C, filter, FH, FW, M, outputs[i], PH, PW);
+  yaconv(images, N, H, W, C, filter, FH, FW, M, outputs, PH, PW);
 #endif
 
   // Punch out
