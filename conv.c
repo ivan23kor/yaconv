@@ -1,8 +1,15 @@
-#if defined(IM2COL_OPENBLAS) || defined(YACONV_OPENBLAS)
-#include "cblas.h"
-#else
-#error "No valid convolution algorithm defined"
+#if !defined(IM2COL) && !defined(YACONV)
+#error "No convolution algorithm defined! [IM2COL/YACONV]"
 #endif
+
+#ifdef OPENBLAS
+#include "cblas.h"
+#elif defined(BLIS)
+#include "blis/blis.h"
+#else
+#error "No BLAS defined! [OPENBLAS/BLIS]"
+#endif
+
 #include <stdlib.h>
 #include <time.h>
 
@@ -12,11 +19,16 @@
   COUNTER += (timer_stop.tv_sec - timer_start.tv_sec) * 1e9; \
   COUNTER += timer_stop.tv_nsec - timer_start.tv_nsec;
 
-float *alloc_random(int size);
+float *alloc_and_init(int size);
 
 void im2col_conv(float **images, int N, int H, int W, int C,
                  float *filter, int FH, int FW, int M,
                  float **outputs, int PH, int PW);
+
+void print_array(float *array, int size);
+
+void tranform_for_im2col(float *filter, float **images, int N,
+                         int H, int W, int C, int FH, int FW, int M);
 
 int main(int argc, char** argv) {
   // Init seed for array randomization
@@ -42,34 +54,33 @@ int main(int argc, char** argv) {
   const int OW = W + 2 * PW - FW + 1;
 
   // Filter array
-  float *filter = alloc_random(FH * FW * C * M);
+  float *filter = alloc_and_init(FH * FW * C * M);
 
   // Input arrays
   float **images = (float **)malloc(N * sizeof(float *));
   for (int i = 0; i < N; ++i)
-    images[i] = alloc_random(H * W * C);
+    images[i] = alloc_and_init(H * W * C);
 
   // Output arrays
   float **outputs = (float **)malloc(N * sizeof(float *));
   int output_size = OH * OW * M;
-#ifdef YACONV_OPENBLAS
+#ifdef YACONV
   output_size += yaconv_extra_size(H, FH, PH, OW, M);
 #endif
   for (int i = 0; i < N; ++i)
-    outputs[i] = alloc_random(output_size);
+    outputs[i] = alloc_and_init(output_size);
 
   // Time variables
   struct timespec timer_start, timer_stop;
-  double nap = 0.0;
   double total = 0.0;
 
   // Punch in
   START_TIMER();
 
   // Compute convolution
-#if defined(IM2COL_OPENBLAS)
+#if defined(IM2COL)
   im2col_conv(images, N, H, W, C, filter, FH, FW, M, outputs, PH, PW);
-#elif defined(YACONV_OPENBLAS)
+#elif defined(YACONV)
   yaconv(images, N, H, W, C, filter, FH, FW, M, outputs, PH, PW);
 #endif
 
@@ -79,6 +90,29 @@ int main(int argc, char** argv) {
   // Print GFLOPS
   printf("%5.2f\n", 2.0 * N * M * FH * FW * C * OH * OW / total);
 
+  // For yaconv, compare with reference implementation (im2col)
+#if defined(YACONV) && defined(CHECK)
+  float **outputs_ref = (float **)malloc(N * sizeof(float *));
+  for (int i = 0; i < N; ++i)
+    outputs_ref[i] = alloc_and_init(OH * OW * M);
+
+  // For im2col, change image layout HWC -> CHW and filter layout HWCM -> MCHW
+  tranform_for_im2col(filter, images, N, H, W, C, FH, FW, M);
+  im2col_conv(images, N, H, W, C, filter, FH, FW, M, outputs_ref, PH, PW);
+
+#define MAX(a,b) (a > b ? a : b)
+#define ABS(a) (a > 0 ? a : -a)
+  float max_rel_diff = 0.0;
+  int yaconv_before_off = yaconv_extra_size_before(FH, PH, OW, M);
+  for (int i = 0; i < N; ++i) {
+    float *output = outputs[i] + yaconv_before_off;
+    for (int j = 0; j < OH * OW * M; ++j)
+      max_rel_diff = MAX(max_rel_diff,
+                         ABS(outputs_ref[i][j] - output[j]) / output[j]);
+  }
+  // printf("%f\n", max_rel_diff);
+#endif
+
   // Free arrays
   free(filter);
   for (int i = 0; i < N; ++i) {
@@ -86,10 +120,14 @@ int main(int argc, char** argv) {
     free(outputs[i]);
   }
 
+#if defined(YACONV) && defined(CHECK)
+  return max_rel_diff > 1e-3;
+#else
   return 0;
+#endif
 }
 
-float *alloc_random(int size) {
+float *alloc_and_init(int size) {
 
   // Try to allocate
   float *data = (float*)malloc(size * sizeof(float));
@@ -104,8 +142,37 @@ float *alloc_random(int size) {
   for (int i = 0; i < size; ++i)
     // data[i] = rand() % 256; // fill with random numbers from [0, 255]
     data[i] = i + 1; // fill with a sequence 1, 2, 3, ...
+    // data[i] = 1; // fill with a constant 1
 
   return data;
+}
+
+void print_array(float *array, int size) {
+  for (int i = 0; i < size; ++i)
+    printf("%.0f ", array[i]);
+  printf("\n");
+}
+
+void tranform_for_im2col(float *filter, float **images, int N,
+                         int H, int W, int C, int FH, int FW, int M) {
+  float *filter_hwcm = alloc_and_init(FH * FW * C * M);
+  for (int fh = 0; fh < FH; ++fh)
+    for (int fw = 0; fw < FW; ++fw)
+      for (int c = 0; c < C; ++c)
+        for (int m = 0; m < M; ++m)
+          *(filter + m * C * FH * FW + c * FH * FW + fh * FW + fw) =
+              *(filter_hwcm + fh * FW * C * M + fw * C * M + c * M + m);
+
+  float *image_hwc = alloc_and_init(H * W * C);
+  for (int i = 0; i < N; ++i)
+    for (int h = 0; h < H; ++h)
+      for (int w = 0; w < W; ++w)
+        for (int c = 0; c < C; ++c)
+          *(images[i] + c * H * W + h * W + w) =
+              *(image_hwc + h * W * C + w * C + c);
+
+  free(filter_hwcm);
+  free(image_hwc);
 }
 
 // The following two functions are taken from
@@ -113,6 +180,7 @@ float *alloc_random(int size) {
 // static_cast in is_a_ge_zero_and_a_lt_b was changed to C-style cast
 #define is_a_ge_zero_and_a_lt_b(a, b) ((unsigned)a < (unsigned)b)
 
+// This im2col works on NCHW->NMHW format, while yaconv works on NHWC->NHWM
 void im2col(const float *data_im, const int channels, const int height,
             const int width, const int kernel_h, const int kernel_w,
             const int pad_h, const int pad_w, const int stride_h,
@@ -158,7 +226,7 @@ void im2col_conv(float **images, int N, int H, int W, int C,
 
   const int OH = H + 2 * PH - FH + 1;
   const int OW = W + 2 * PW - FW + 1;
-  float *im2col_buf = alloc_random(OH * OW * FH * FW * C);
+  float *im2col_buf = alloc_and_init(OH * OW * FH * FW * C);
   float alpha = 1.0, beta = 0.0;
 
   for (int i = 0; i < N; ++i) {
@@ -166,8 +234,18 @@ void im2col_conv(float **images, int N, int H, int W, int C,
     im2col(images[i], C, H, W, FH, FW, PH, PW, 1, 1, 1, 1, im2col_buf);
 
     // GEMM
-    cblas_sgemm(CblasColMajor, CblasTrans, CblasTrans, M, OH * OW, FH * FW * C,
-       alpha, filter, FH * FW * C, im2col_buf, OH * OW, beta, outputs[i], M);
+    int m = M, k = FH * FW * C, n = OH * OW;
+#ifdef OPENBLAS
+    cblas_sgemm(CblasColMajor, CblasTrans, CblasTrans, m, n, k,
+                alpha, filter, k,
+                im2col_buf, n,
+                beta, outputs[i], m);
+#elif defined(BLIS)
+    bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, m, n, k,
+              &alpha, filter, k, 1,
+              im2col_buf, n, 1,
+	            &beta, outputs[i], 1, m);
+#endif
   }
 
   free(im2col_buf);

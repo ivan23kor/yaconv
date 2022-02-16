@@ -1,3 +1,6 @@
 [submodule "OpenBLAS"]
 	path = OpenBLAS
 	url = git@github.com:ivan23kor/OpenBLAS.git
+[submodule "blis"]
+	path = blis
+	url = git@github.com:ivan23kor/blis.git
