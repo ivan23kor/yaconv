@@ -108,7 +108,8 @@ int main(int argc, char** argv) {
     float *output = outputs[i] + yaconv_before_off;
     for (int j = 0; j < OH * OW * M; ++j)
       max_rel_diff = MAX(max_rel_diff,
-                         ABS(outputs_ref[i][j] - output[j]) / output[j]);
+                         ABS((outputs_ref[i][j] - output[j])
+                             / MAX(outputs_ref[i][j], output[j])));
   }
   // printf("%f\n", max_rel_diff);
 #endif
@@ -224,11 +225,15 @@ void im2col_conv(float **images, int N, int H, int W, int C,
                  float *filter, int FH, int FW, int M,
                  float **outputs, int PH, int PW) {
 
+  // GEMM alpha and beta
+  float alpha = 1.0, beta = 0.0;
+
+  // im2col buffer
   const int OH = H + 2 * PH - FH + 1;
   const int OW = W + 2 * PW - FW + 1;
   float *im2col_buf = alloc_and_init(OH * OW * FH * FW * C);
-  float alpha = 1.0, beta = 0.0;
 
+  // im2col + GEMM
   for (int i = 0; i < N; ++i) {
     // im2col
     im2col(images[i], C, H, W, FH, FW, PH, PW, 1, 1, 1, 1, im2col_buf);

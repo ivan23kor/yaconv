@@ -1,6 +1,5 @@
 CC := gcc
-OPTFLAGS := -O2
-CFLAGS :=
+CFLAGS := -O2
 
 # If CHECK==1, check output correctness for yaconv
 ifeq ($(CHECK),1)
@@ -8,15 +7,23 @@ CFLAGS += -DCHECK
 endif
 
 # Link flags
-OPENBLAS_LINK := -lopenblas
-BLIS_LINK := -lblis
+OPENBLAS_LINK := -lopenblas -lm
+BLIS_LINK := -lblis -lm
 
-# Binaries
-OPENBLAS_TARGETS := im2col_openblas yaconv_openblas
-BLIS_TARGETS := im2col_blis yaconv_blis
+# Set up targets
+HOSTNAME := $(shell hostname)
+ALGS := IM2COL YACONV
+LIBS := BLIS OPENBLAS
+OPENBLAS_TARGETS := $(foreach alg, $(ALGS), $(alg)_OPENBLAS.$(HOSTNAME))
+BLIS_TARGETS := $(foreach alg, $(ALGS), $(alg)_BLIS.$(HOSTNAME))
 TARGETS := $(OPENBLAS_TARGETS) $(BLIS_TARGETS)
 
-.PHONY: all clean
+# Parse alg and target names from target name
+NAME_TUPLE = $(subst _, ,$(@:.$(HOSTNAME)=))
+ALG = $(word 1,$(NAME_TUPLE))
+LIB = $(word 2,$(NAME_TUPLE))
+
+.PHONY: all openblas blis clean
 
 all : $(TARGETS)
 
@@ -24,17 +31,8 @@ openblas : $(OPENBLAS_TARGETS)
 
 blis : $(BLIS_TARGETS)
 
-im2col_openblas : conv.c
-	$(CC) $(OPTFLAGS) $(CFLAGS) -DIM2COL -DOPENBLAS $< -o $@ $(OPENBLAS_LINK)
-
-yaconv_openblas : conv.c
-	$(CC) $(OPTFLAGS) $(CFLAGS) -DYACONV -DOPENBLAS $< -o $@ $(OPENBLAS_LINK)
-
-im2col_blis : conv.c
-	$(CC) $(OPTFLAGS) $(CFLAGS) -DIM2COL -DBLIS $< -o $@ $(BLIS_LINK)
-
-yaconv_blis : conv.c
-	$(CC) $(OPTFLAGS) $(CFLAGS) -DYACONV -DBLIS $< -o $@ $(BLIS_LINK)
+%.$(HOSTNAME) : conv.c
+	$(CC) $(CFLAGS) -D$(ALG) -D$(LIB) $< -o $@ $($(LIB)_LINK)
 
 clean :
 	$(RM) $(TARGETS)
