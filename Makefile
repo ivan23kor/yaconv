@@ -14,22 +14,22 @@ BLIS_LINK := -lblis -lm
 HOSTNAME := $(shell hostname)
 ALGS := IM2COL YACONV
 LIBS := BLIS OPENBLAS
-OPENBLAS_TARGETS := $(foreach alg, $(ALGS), $(alg)_OPENBLAS.$(HOSTNAME))
-BLIS_TARGETS := $(foreach alg, $(ALGS), $(alg)_BLIS.$(HOSTNAME))
-TARGETS := $(OPENBLAS_TARGETS) $(BLIS_TARGETS)
+OPENBLAS_TARGETS := $(foreach alg,$(ALGS),$(alg)_OPENBLAS.$(HOSTNAME))
+BLIS_TARGETS := $(foreach alg,$(ALGS),$(alg)_BLIS.$(HOSTNAME))
+TARGETS := $(BLIS_TARGETS)
 
 # Parse alg and target names from target name
 NAME_TUPLE = $(subst _, ,$(@:.$(HOSTNAME)=))
 ALG = $(word 1,$(NAME_TUPLE))
 LIB = $(word 2,$(NAME_TUPLE))
 
-.PHONY: all openblas blis clean
+.PHONY: all blis openblas clean
 
 all : $(TARGETS)
 
-openblas : $(OPENBLAS_TARGETS)
-
 blis : $(BLIS_TARGETS)
+
+openblas : $(OPENBLAS_TARGETS)
 
 %.$(HOSTNAME) : conv.c
 	$(CC) $(CFLAGS) -D$(ALG) -D$(LIB) $< -o $@ $($(LIB)_LINK)
