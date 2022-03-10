@@ -1,6 +1,11 @@
 [submodule "OpenBLAS"]
 	path = OpenBLAS
 	url = git@github.com:ivan23kor/OpenBLAS.git
+	branch = develop
+	update = rebase
+	ignore = dirty
 [submodule "blis"]
 	path = blis
 	url = git@github.com:ivan23kor/blis.git
+	update = rebase
+	ignore = dirty

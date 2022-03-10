@@ -224,13 +224,14 @@ void im2col(const float *data_im, const int channels, const int height,
 void im2col_conv(float **images, int N, int H, int W, int C,
                  float *filter, int FH, int FW, int M,
                  float **outputs, int PH, int PW) {
-
-  // GEMM alpha and beta
-  float alpha = 1.0, beta = 0.0;
-
   // im2col buffer
   const int OH = H + 2 * PH - FH + 1;
   const int OW = W + 2 * PW - FW + 1;
+
+  // GEMM alpha, beta and sizes
+  float alpha = 1.0, beta = 0.0;
+  int m = M, k = FH * FW * C, n = OH * OW;
+
   float *im2col_buf = alloc_and_init(OH * OW * FH * FW * C);
 
   // im2col + GEMM
@@ -239,7 +240,6 @@ void im2col_conv(float **images, int N, int H, int W, int C,
     im2col(images[i], C, H, W, FH, FW, PH, PW, 1, 1, 1, 1, im2col_buf);
 
     // GEMM
-    int m = M, k = FH * FW * C, n = OH * OW;
 #ifdef OPENBLAS
     cblas_sgemm(CblasColMajor, CblasTrans, CblasTrans, m, n, k,
                 alpha, filter, k,
