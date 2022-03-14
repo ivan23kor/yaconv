@@ -25,8 +25,6 @@ void im2col_conv(float **images, int N, int H, int W, int C,
                  float *filter, int FH, int FW, int M,
                  float **outputs, int PH, int PW);
 
-void print_array(float *array, int size);
-
 void tranform_for_im2col(float *filter, float **images, int N,
                          int H, int W, int C, int FH, int FW, int M);
 
@@ -146,12 +144,6 @@ float *alloc_and_init(int size) {
     // data[i] = 1; // fill with a constant 1
 
   return data;
-}
-
-void print_array(float *array, int size) {
-  for (int i = 0; i < size; ++i)
-    printf("%.0f ", array[i]);
-  printf("\n");
 }
 
 void tranform_for_im2col(float *filter, float **images, int N,
