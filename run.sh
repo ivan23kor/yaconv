@@ -14,8 +14,8 @@ estimate_n_images() {
 }
 
 run_layer() {
-  local layer="${@:1:8}"
-  local bin=$9
+  local bin=$1
+  local layer="${@:2}"
 
   local n_images=$(estimate_n_images ${layer[@]})
   local stat_file="$BASE_DIR/$bin/stat/$layer"
@@ -24,7 +24,7 @@ run_layer() {
   echo -n "[$bin] $layer ... "
 
   perf stat -ddd -o "$stat_file" -x , -r $REPEAT \
-    numactl -C0 ./$bin $n_images $layer > "$gflops_file"
+    numactl -C 0 -m 0 ./$bin $n_images $layer > "$gflops_file"
 
   echo "Done!"
 }
@@ -34,7 +34,7 @@ from_file() {
   local layers_file="./layers.txt"
 
   while read -a layer; do
-    run_layer ${layer[@]} $bin
+    run_layer $bin ${layer[@]}
   done < $layers_file
 }
 
