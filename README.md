@@ -1,31 +1,24 @@
 
 # YaConv: Convolution with Low Cache Footprint
 
-## Installation requirements
+## 1. Install dependencies
 
-Linux toolchain (*GCC*, *perf*, *numactl*):
 ```bash
 sudo apt install linux-tools-common linux-tools-generic linux-tools-$(uname -r) numactl
 ```
 
-## Build
+## 2. Build
 
 ```bash
 git clone --recurse-submodules https://github.com/ivan23kor/yaconv.git
-cd yaconv/blis
-./configure -a yaconv auto
-make -j 12
-sudo make install
-export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib:/usr/lib"
-cd ../
-make blis
+cd yaconv && make
 ```
 
-## How to Run
+## 3. Run
 
-1. Run an algorithm binary `BINARY` on a given layer:
+1. Run either `im2col` or `yaconv` binary on a given layer:
 ```bash
-./BINARY N H W C FH FW M PH PW  # outputs GFLOPS
+./<BINARY> N H W C FH FW M PH PW  # outputs GFLOPS
 ```
 
 | Parameter | Explanation                     |
@@ -37,12 +30,11 @@ make blis
 | M         | number of output channels       |
 | PH, PW    | vertical and horizontal padding |
 
-2. Gather comparative data for _IM2COL_ and _YACONV_ on a grid:
+2. Gather comparative data for `im2col` and `yaconv` on a pre-defined grid:
 ```bash
-./run.sh
-./run.sh -i grid  # (default)
+./run.sh # writes run data on disk to ./Results/
 ```
-The command above will run _IM2COL_BLIS_ and _YACONV_BLIS_ on the following parameter grid:
+The command above will run `./im2col` and `./yaconv` binaries on the following parameter grid:
 | Parameter | Values
 | :-------: |:---------------------------------------------:
 | N         | Auto-adjusted to make ~100 GFLOPS workload per layer
@@ -52,12 +44,25 @@ The command above will run _IM2COL_BLIS_ and _YACONV_BLIS_ on the following para
 | M         | 32  64  96  128  192  256  384  512  768  960  1024  1152
 | PH, PW    | 1
 
-3. Gather comparative data for _IM2COL_ and _YACONV_ on a set of layers given in a file:
+GFLOPS and `perf stat` data will be in a directory structure:
+```
+Results/
+|-- im2col
+|   |-- gflops
+|   `-- stat
+`-- yaconv
+    |-- gflops
+    `-- stat
+```
+
+For more information on the output in `./Results/`, run `./run.sh -h`
+
+3. Gather comparative data for `im2col` or `yaconv` on a set of layers given in layers.txt:
 ```bash
-./run.sh
 ./run.sh -i file  # (from layers.txt)
 ```
-`layers.txt` should contain one layer per line. Layer parameters should be whitespace-separated, e.g.:
+
+`./layers.txt` template:
 ```txt
 7 7 1024 3 3 32 1 1
 5 5 128 3 3 32 1 1
@@ -66,4 +71,6 @@ The command above will run _IM2COL_BLIS_ and _YACONV_BLIS_ on the following para
 ```
 **Note the empty line at the end of the file.**
 
-The output will by default be stored in various files `./Results/`, more on that `./run.sh -h`
+## Publication
+
+You can find the paper [online](https://dl.acm.org/doi/10.1145/3570305) or download a [pdf](./YaConv.pdf) from this repository.

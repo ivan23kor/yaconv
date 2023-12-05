@@ -1,9 +1,3 @@
-[submodule "OpenBLAS"]
-	path = OpenBLAS
-	url = git@github.com:ivan23kor/OpenBLAS.git
-	branch = yaconv
-	update = rebase
-	ignore = dirty
 [submodule "blis"]
 	path = blis
 	url = git@github.com:ivan23kor/blis.git

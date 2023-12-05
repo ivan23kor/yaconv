@@ -6,33 +6,34 @@ ifeq ($(CHECK),1)
 CFLAGS += -DCHECK
 endif
 
-# Link flags
-OPENBLAS_LINK := -lopenblas -lm
-BLIS_LINK := -lblis -lm
+ROOT_DIR != dirname $(realpath $(firstword $(MAKEFILE_LIST)))
 
-# Set up targets
-HOSTNAME := $(shell hostname)
-ALGS := IM2COL YACONV
-LIBS := BLIS OPENBLAS
-OPENBLAS_TARGETS := $(foreach alg,$(ALGS),$(alg)_OPENBLAS.$(HOSTNAME))
-BLIS_TARGETS := $(foreach alg,$(ALGS),$(alg)_BLIS.$(HOSTNAME))
-TARGETS := $(BLIS_TARGETS)
+# BLIS configuration
+BLIS_INSTALL_PATH := $(ROOT_DIR)/blis_install
+BLIS_CONFIGURE_CMD := ./configure --prefix=$(BLIS_INSTALL_PATH) -a yaconv auto
 
-# Parse alg and target names from target name
-NAME_TUPLE = $(subst _, ,$(@:.$(HOSTNAME)=))
-ALG = $(word 1,$(NAME_TUPLE))
-LIB = $(word 2,$(NAME_TUPLE))
+# lib and include flags
+CFLAGS += -I$(BLIS_INSTALL_PATH)/include
+LDFLAGS += -L$(BLIS_INSTALL_PATH)/lib
+LDLIBS += -l:libblis.a -lm -lpthread
 
-.PHONY: all blis openblas clean
+# Target binaries
+BINARIES := im2col yaconv
 
-all : $(TARGETS)
+# Uppercase function
+UC = $(shell echo '$1' | tr '[:lower:]' '[:upper:]')
 
-blis : $(BLIS_TARGETS)
+.PHONY: all clean
 
-openblas : $(OPENBLAS_TARGETS)
+all : blis_install $(BINARIES)
 
-%.$(HOSTNAME) : conv.c
-	$(CC) $(CFLAGS) -D$(ALG) -D$(LIB) $< -o $@ $($(LIB)_LINK)
+blis_install :
+	cd blis && $(BLIS_CONFIGURE_CMD)
+	$(MAKE) -C blis/ -j 8
+	$(MAKE) -C blis/ install
+
+% : conv.c
+	$(CC) $(CFLAGS) -D$(call UC,$@) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
 clean :
-	$(RM) $(TARGETS)
+	$(RM) -r $(BINARIES) $(BLIS_INSTALL_PATH)

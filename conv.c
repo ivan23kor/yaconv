@@ -2,16 +2,10 @@
 #error "No convolution algorithm defined! [IM2COL/YACONV]"
 #endif
 
-#ifdef OPENBLAS
-#include "cblas.h"
-#elif defined(BLIS)
-#include "blis/blis.h"
-#else
-#error "No BLAS defined! [OPENBLAS/BLIS]"
-#endif
-
 #include <stdlib.h>
 #include <time.h>
+
+#include "blis/blis.h"
 
 #define START_TIMER()	clock_gettime(CLOCK_REALTIME, &timer_start);
 #define STOP_TIMER(COUNTER) \
@@ -232,17 +226,10 @@ void im2col_conv(float **images, int N, int H, int W, int C,
     im2col(images[i], C, H, W, FH, FW, PH, PW, 1, 1, 1, 1, im2col_buf);
 
     // GEMM
-#ifdef OPENBLAS
-    cblas_sgemm(CblasColMajor, CblasTrans, CblasTrans, m, n, k,
-                alpha, filter, k,
-                im2col_buf, n,
-                beta, outputs[i], m);
-#elif defined(BLIS)
     bli_sgemm(BLIS_NO_TRANSPOSE, BLIS_NO_TRANSPOSE, m, n, k,
               &alpha, filter, k, 1,
               im2col_buf, n, 1,
-	            &beta, outputs[i], 1, m);
-#endif
+	      &beta, outputs[i], 1, m);
   }
 
   free(im2col_buf);

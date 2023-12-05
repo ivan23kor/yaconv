@@ -6,3 +6,11 @@ make_defs.mk
 conv
 gemm
 obj/*.o
+blis_install/
+
+# Binaries
+im2col
+yaconv
+
+# Run output
+results/

@@ -3,29 +3,29 @@
 set -e
 
 INPUT=grid
-OUTPUT_DIR=Results
+OUTPUT_DIR=./results
 RUNS=10
 
-usage() { echo "\
-Usage: $0 -i=$INPUT ["grid"|"file"] -o=$OUTPUT_DIR <path> -r=$RUNS <number>
+__usage="
+Usage: $(basename $0) -i=$INPUT [\"grid\"|\"file\"] -o=$OUTPUT_DIR <path> -r=$RUNS <number>
 
   -i=\"$INPUT\", \"grid\" or \"file\".
     When \"grid\", run on a hardcoded grid of parameters
     When \"file\", run on a list of layers given in layers.txt.
       Each layer should be on its own line, end with a newline and layer parameters are to be whitespace-separated, e.g.:
-      ```
-        7 7 1024 3 3 32 1 1
-        5 5 128 3 3 32 1 1
-        7 7 256 3 3 32 1 1
+      \`\`\`
+      7 7 1024 3 3 32 1 1
+      5 5 128  3 3 32 1 1
+      7 7 256  3 3 32 1 1
 
-      ```
+      \`\`\`
       Note the empty line at the end of the file.
 
   -o=\"$OUTPUT_DIR\"
     Path to where run results will be stored.
     Output directory structure:
-      Results/
-      └── IM2COL_BLIS.$HOSTNAME
+      $OUTPUT_DIR/
+      └── im2col
           ├── gflops
           │   ├── layer1
           │   ├── layer2
@@ -34,7 +34,7 @@ Usage: $0 -i=$INPUT ["grid"|"file"] -o=$OUTPUT_DIR <path> -r=$RUNS <number>
           │   ├── layer1
           │   ├── layer2
           │   ├── ...
-      └── YACONV_BLIS.$HOSTNAME
+      └── yaconv
           ├── gflops
           │   ├── layer1
           │   ├── layer2
@@ -45,11 +45,15 @@ Usage: $0 -i=$INPUT ["grid"|"file"] -o=$OUTPUT_DIR <path> -r=$RUNS <number>
           │   ├── ...
     
     \"gflops\" files contain GFLOPS float numbers per run
-    \"stat\" files contain averaged output of `perf stat`
+    \"stat\" files contain averaged output of \`perf stat\`
 
   -r=$RUNS
-    Number of averaging runs\
-"; }
+    Number of averaging runs
+"
+
+usage() {
+  echo "$__usage"
+}
 
 
 estimate_n_images() {
@@ -68,6 +72,7 @@ run_layer() {
 
   echo -n "[$bin] $layer ... "
 
+  echo sudo perf stat -ddd -o "$stat_file" -x , -r $RUNS numactl -C 0 -m 0 ./$bin $n_images $layer
   sudo perf stat -ddd -o "$stat_file" -x , -r $RUNS \
     numactl -C 0 -m 0 ./$bin $n_images $layer > "$gflops_file"
 
@@ -97,7 +102,7 @@ grid() {
 
 run() {
   local run_func=$1
-  BINS="YACONV_BLIS.$HOSTNAME IM2COL_BLIS.$HOSTNAME"
+  BINS="yaconv im2col"
   for bin in $BINS; do
     ls $bin > /dev/null
     date
